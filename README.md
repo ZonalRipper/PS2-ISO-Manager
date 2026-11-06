@@ -1,4 +1,4 @@
-# PS2 ISO Batch Management Suite Pro
+# PS2 ISO Manager
 
 A feature-rich, high-performance desktop utility built with Python and Tkinter designed to manage, convert, compress, rename, and organize PlayStation 2 assets for Open PS2 Loader (OPL). Features a hardware-accelerated 3D WebGL game case and optical disc viewer powered by Three.js.
 
