@@ -1,0 +1,18 @@
+# Python / Editor Caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+env/
+.vscode/
+.vs/
+
+# PyInstaller Build Artifacts & Binaries
+build/
+dist/
+*.spec
+*.exe
+
+# Local Debug Files & Logs
+chd_error_log.txt

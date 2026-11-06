@@ -13,9 +13,11 @@ from ps2_utility.viewer import open_3d_art_viewer
 
 game_db = {}
 
+from ps2_utility.core import extract_game_id, format_size, resource_path
+
 def update_database_threaded(app_instance):
     global game_db
-    db_path = os.path.join(os.getcwd(), "PS2.data.json")
+    db_path = resource_path("PS2.data.json")
     
     if not os.path.exists(db_path):
         app_instance.status_label.config(text="PS2.data.json not found. Titles will default to 'Unknown Title'.")
@@ -66,7 +68,7 @@ def re_sub_safe(name):
 class PSToolkitApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("PS2 ISO Batch Management Suite Pro")
+        self.root.title("PS2 ISO Manager")
         self.root.geometry("1000x650")
         self.root.minsize(900, 550)
         
