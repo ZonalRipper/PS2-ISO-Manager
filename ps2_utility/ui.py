@@ -7,9 +7,11 @@ import urllib.request
 import urllib.error
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+import webbrowser
 
 from ps2_utility.core import extract_game_id, format_size, resource_path
 from ps2_utility.viewer import open_3d_art_viewer
+from ps2_utility.about import open_about_dialog
 
 game_db = {}
 
@@ -69,8 +71,24 @@ class PSToolkitApp:
     def __init__(self, root):
         self.root = root
         self.root.title("PS2 ISO Manager")
+        # --- TOP MENU BAR ---
+        menubar = tk.Menu(root)
+        
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="About PS2-ISO-Manager", command=lambda: open_about_dialog(root, self.is_dark_mode))
+        help_menu.add_command(label="GitHub Repository", command=lambda: webbrowser.open("https://github.com/ZonalRipper/PS2-ISO-Manager"))
+        menubar.add_cascade(label="Help", menu=help_menu)
+        
         self.root.geometry("1000x650")
         self.root.minsize(900, 550)
+
+        # --- SET CUSTOM WINDOW ICON ---
+        icon_path = resource_path("app_icon.ico")
+        if os.path.exists(icon_path):
+            try:
+                self.root.iconbitmap(icon_path)
+            except Exception as e:
+                print(f"Failed to load window icon: {e}")
         
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
@@ -93,10 +111,11 @@ class PSToolkitApp:
         self.overwrite_art = tk.BooleanVar(value=False)
         
         top_bar = ttk.Frame(root)
-        top_bar.pack(fill='x', padx=15, pady=(5, 0))
+        top_bar.pack(fill='x', padx=15, pady=(8, 5))
         
+        # Left side: Progress & Status
         progress_frame = ttk.Frame(top_bar)
-        progress_frame.pack(side='left', fill='x', expand=True)
+        progress_frame.pack(side='left', fill='x', expand=True, padx=(0, 10))
         
         self.progress = ttk.Progressbar(progress_frame, orient='horizontal', mode='determinate')
         self.progress.pack(fill='x', pady=(0, 2))
@@ -104,11 +123,22 @@ class PSToolkitApp:
         self.status_label = ttk.Label(progress_frame, text="Preparing configurations...", font=("Arial", 9, "italic"))
         self.status_label.pack(side='left')
         
-        self.btn_cancel = ttk.Button(progress_frame, text="🛑 Stop Task", command=self.cancel_process, state='disabled')
-        self.btn_cancel.pack(side='right', padx=(10, 0))
-        
-        self.btn_theme = tk.Button(top_bar, text="", command=self.toggle_theme, relief="flat", font=("Segoe UI Symbol", 14), cursor="hand2", bd=0)
-        self.btn_theme.pack(side='right', padx=(15, 0), anchor='center')
+        # Right side: Controls (Stop Button, Help, Theme Toggle)
+        controls_frame = ttk.Frame(top_bar)
+        controls_frame.pack(side='right')
+
+        # Standard tk.Button so we can style the background and text color explicitly (Red Stop Button)
+        self.btn_cancel = tk.Button(
+            controls_frame, text="🛑 Stop Task", command=self.cancel_process, state='disabled',
+            relief="flat", font=("Arial", 9, "bold"), bd=0, padx=10, pady=4, cursor="hand2"
+        )
+        self.btn_cancel.pack(side='left', padx=(0, 8))
+
+        self.btn_help = ttk.Button(controls_frame, text="Help ▾", command=self.show_help_menu)
+        self.btn_help.pack(side='left', padx=(0, 8))
+
+        self.btn_theme = tk.Button(controls_frame, text="", command=self.toggle_theme, relief="flat", font=("Segoe UI Symbol", 13), cursor="hand2", bd=0)
+        self.btn_theme.pack(side='left')
         
         header_frame = ttk.LabelFrame(root, text="Queue Management")
         header_frame.pack(fill='x', padx=10, pady=(10, 5))
@@ -130,6 +160,9 @@ class PSToolkitApp:
         
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill='both', expand=True, padx=10, pady=5)
+
+        # Bind tab change event to toggle queue button states
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
         
         self.columns = ('selected', 'original_name', 'preview_action', 'size_status')
         self.opl_columns = ('selected', 'original_name', 'game_id', 'art_missing', 'art_status', 'action')
@@ -183,6 +216,22 @@ class PSToolkitApp:
 
         self.apply_theme()
         threading.Thread(target=update_database_threaded, args=(self,), daemon=True).start()
+
+    def on_tab_changed(self, event):
+        try:
+            current_tab_index = self.notebook.index(self.notebook.select())
+            
+            # Tab 6 is index 5 (0: BIN>ISO, 1: Rename, 2: ZSO, 3: CHD, 4: Extract, 5: OPL Drive & Art)
+            if current_tab_index == 5:
+                self.btn_add_files.config(state='disabled')
+                self.btn_add_folder.config(state='disabled')
+            else:
+                # Only re-enable if a background batch task isn't currently running
+                if self.progress['value'] == 0:
+                    self.btn_add_files.config(state='normal')
+                    self.btn_add_folder.config(state='normal')
+        except Exception:
+            pass
 
     def on_closing(self):
         if self.active_process and self.active_process.poll() is None:
@@ -544,32 +593,56 @@ class PSToolkitApp:
             
         threading.Thread(target=process, daemon=True).start()
 
+    def show_help_menu(self):
+        # Create a popup menu that matches the action coordinates
+        help_popup = tk.Menu(self.root, tearoff=0)
+        
+        # Style the popup menu colors dynamically based on theme
+        if self.is_dark_mode:
+            help_popup.config(bg="#242832", fg="#f4f4f5", activebackground="#00439c", activeforeground="#ffffff")
+        else:
+            help_popup.config(bg="#e1e1e1", fg="#000000", activebackground="#0070d1", activeforeground="#ffffff")
+            
+        help_popup.add_command(label="About PS2-ISO-Manager", command=lambda: open_about_dialog(self.root, self.is_dark_mode))
+        help_popup.add_command(label="GitHub Repository", command=lambda: webbrowser.open("https://github.com/ZonalRipper/PS2-ISO-Manager"))
+        
+        # Get button screen coordinates to pop the menu right below it
+        try:
+            x = self.btn_help.winfo_rootx()
+            y = self.btn_help.winfo_rooty() + self.btn_help.winfo_height()
+            help_popup.tk_popup(x, y)
+        finally:
+            help_popup.grab_release()
+
     def toggle_theme(self):
         self.is_dark_mode = not self.is_dark_mode
         self.apply_theme()
-
     def apply_theme(self):
         style = ttk.Style()
         style.theme_use('clam') 
 
         if self.is_dark_mode:
-            bg_color = "#2d2d2d"
-            fg_color = "#ffffff"
-            tree_bg = "#1e1e1e"
-            tree_fg = "#ffffff"
-            select_bg = "#4a6984"
-            btn_bg = "#3d3d3d"
+            # PlayStation Console Dark Theme Palette
+            bg_color = "#121418"       # Deep console chassis dark
+            fg_color = "#f4f4f5"       # Crisp PlayStation white text
+            tree_bg = "#1a1d23"        # Slightly lighter panel background
+            tree_fg = "#f4f4f5"
+            select_bg = "#00439c"      # Official PlayStation Blue
+            btn_bg = "#242832"         # Controller matte dark grey
             btn_fg = "#ffffff"
-            error_color = "#ff6b6b"
+            error_color = "#f87171"    # Soft red for errors
+            self.btn_cancel.config(bg="#3a1c1c", fg="#f87171", activebackground="#581c1c", activeforeground="#fca5a5")
         else:
+            # Clean Light Mode
             bg_color = "#f0f0f0"
             fg_color = "#000000"
             tree_bg = "#ffffff"
             tree_fg = "#000000"
-            select_bg = "#0078D7"
+            select_bg = "#0070d1"
             btn_bg = "#e1e1e1"
             btn_fg = "#000000"
             error_color = "red"
+            self.btn_cancel.config(bg="#fee2e2", fg="#dc2626", activebackground="#fecaca", activeforeground="#b91c1c")
 
         self.root.configure(bg=bg_color)
         
@@ -596,13 +669,13 @@ class PSToolkitApp:
         
         if hasattr(self, 'btn_theme'):
             icon = "☀" if self.is_dark_mode else "🌙"
-            icon_color = "#FDB813" if self.is_dark_mode else "#4a6984"
+            icon_color = "#FDB813" if self.is_dark_mode else "#00439c"
             self.btn_theme.config(text=icon, bg=bg_color, fg=icon_color, activebackground=bg_color, activeforeground=icon_color)
         
         for tree in [self.bin_tree, self.rename_tree, self.compress_tree, self.chd_tree, self.decompress_tree, self.opl_tree]:
             tree.tag_configure('error', foreground=error_color)
-            tree.tag_configure('clickable', foreground="#4ebaff" if self.is_dark_mode else "#0055ff", font=('Arial', 9, 'underline'))
-
+            tree.tag_configure('clickable', foreground="#38bdf8" if self.is_dark_mode else "#0055ff", font=('Arial', 9, 'underline'))
+    
     def start_progress(self, total, message):
         self.cancel_requested = False
         self.progress['maximum'] = total
