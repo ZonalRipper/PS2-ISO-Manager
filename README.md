@@ -132,6 +132,7 @@ python app.py
 ```
 
 ### Building the Standalone Windows Executable (`.exe`)
+Precompiled windows EXE can be found in the relases but if you want to build yourself the follow the steps below
 
 Package the entire application—including the FastAPI backend, PyWebView window, offline `PS2.data.json` database, and CLI binaries (`bchunk.exe`, `ziso.exe`, `chdman.exe`)—into a single portable executable:
 
