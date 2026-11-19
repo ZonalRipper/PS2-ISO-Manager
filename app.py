@@ -1557,10 +1557,10 @@ if __name__ == "__main__":
     window = webview.create_window(
         title="PS2 ISO Manager",
         url=url,
-        width=1180,
-        height=850,
+        width=1220,
+        height=860,
         resizable=True,
-        min_size=(900, 650)
+        min_size=(700, 540)
     )
     
     # Start the native window event loop
