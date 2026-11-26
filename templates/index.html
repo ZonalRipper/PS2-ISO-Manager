@@ -230,7 +230,7 @@
                         <h1 class="ps2-title-font text-xl sm:text-2xl lg:text-3xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-blue-400 to-indigo-300 drop-shadow-[0_0_12px_rgba(0,140,255,0.35)] truncate">
                             ISO MANAGER
                         </h1>
-                        <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-950/90 text-cyan-300 border border-cyan-500/40 shadow-sm shrink-0">SYS-BROWSER v2.0</span>
+                        <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-950/90 text-cyan-300 border border-cyan-500/40 shadow-sm shrink-0">v1.5</span>
                     </div>
                     <div class="flex items-center gap-3 mt-0.5 text-xs font-semibold text-blue-200/70">
                         <span class="truncate">Open PS2 Loader Library &amp; Disc Mastering Utility</span>
@@ -386,29 +386,90 @@
                         </div>
                     </section>
 
-                    <!-- STEP 2: SELECT OPL DESTINATION FOLDER -->
+                    <!-- STEP 2: SELECT OPL DESTINATION FOLDER OR INTERNAL PS2 HDD (APA/PFS) -->
                     <section id="wizard-step-2" class="wizard-step-panel hidden wizard-panel-enter flex-1 flex flex-col justify-center max-w-4xl w-full mx-auto">
                         <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                             <span class="text-xs font-mono font-extrabold text-emerald-400 uppercase tracking-widest">Step 2 of 7 • OPL Target Drive</span>
                             <button id="recent-dest-btn" onclick="useRecentFolder('destination')" class="hidden text-xs font-mono bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 px-3 py-1 rounded-lg border border-emerald-700/50 transition truncate max-w-[min(360px,65vw)]" title="Load last used OPL destination">⚡ Recent</button>
                         </div>
-                        <h3 class="ps2-title-font text-xl sm:text-2xl font-extrabold text-white mb-2">Select your Destination OPL Folder</h3>
-                        <p class="text-sm text-gray-300 mb-6 leading-relaxed">
-                            Choose the root of your OPL USB drive, HDD, or SMB share. Auto Pilot will automatically set up <code class="text-emerald-300 font-mono">DVD/</code>, <code class="text-emerald-300 font-mono">CD/</code>, <code class="text-emerald-300 font-mono">ART/</code>, and <code class="text-emerald-300 font-mono">CFG/</code> directories and check for duplicates or FAT32 limits.
+                        <h3 class="ps2-title-font text-xl sm:text-2xl font-extrabold text-white mb-2">Select your Destination OPL Drive</h3>
+                        <p class="text-sm text-gray-300 mb-4 leading-relaxed">
+                            Choose either a standard mounted drive/folder (USB, exFAT/FAT32, SMB) or a directly connected <strong>Internal PS2 HDD (APA / PFS)</strong>.
                         </p>
 
-                        <div id="dest-container" class="bg-panel/80 p-4 sm:p-5 rounded-xl border border-emerald-500/30 shadow-lg">
-                            <label class="block text-[11px] font-mono uppercase tracking-wider text-gray-400 mb-2">Selected OPL Destination Root</label>
-                            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                                <div class="flex-1 bg-darkbg/90 px-4 py-3 rounded-lg border border-gray-800 min-w-0 flex items-center">
-                                    <span id="dest-path-display" class="font-mono text-sm text-gray-400 truncate w-full" title="No OPL Destination Selected">No OPL Destination Selected</span>
+                        <!-- Destination Type Switcher -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
+                            <button type="button" id="dest-mode-folder-btn" onclick="setDestMode('folder')" class="rounded-xl px-4 py-3 text-left border transition flex items-center gap-3 bg-emerald-950/40 border-emerald-400/70 text-white shadow-[0_0_16px_rgba(16,185,129,0.2)]">
+                                <span class="text-xl">📁</span>
+                                <div class="min-w-0">
+                                    <div class="text-sm font-extrabold">Standard Folder / USB / exFAT / SMB</div>
+                                    <div class="text-[11px] text-gray-400 truncate">DVD/, CD/, ART/, CFG/ on any mounted drive</div>
                                 </div>
-                                <button onclick="pickFolder('destination')" id="btn-dest" class="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-lg text-sm font-extrabold transition shadow-lg flex items-center justify-center gap-2 border border-emerald-400/40">
-                                    <span>🎯</span> Browse OPL Destination
-                                </button>
+                            </button>
+                            <button type="button" id="dest-mode-pfs-btn" onclick="setDestMode('pfs')" class="rounded-xl px-4 py-3 text-left border transition flex items-center gap-3 bg-panel/70 border-gray-700/70 text-gray-300 hover:border-cyan-400/60 hover:text-white">
+                                <span class="text-xl">💽</span>
+                                <div class="min-w-0">
+                                    <div class="text-sm font-extrabold flex items-center gap-1.5">Internal PS2 HDD (APA / PFS) <span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">HDL + +OPL</span></div>
+                                    <div class="text-[11px] text-gray-400 truncate">Direct raw APA HDD install via hdl_dump &amp; pfsshell</div>
+                                </div>
+                            </button>
+                        </div>
+
+                        <div id="dest-container" class="bg-panel/80 p-4 sm:p-5 rounded-xl border border-emerald-500/30 shadow-lg">
+                            <!-- Mode A: Standard Mounted Folder -->
+                            <div id="dest-folder-panel">
+                                <label class="block text-[11px] font-mono uppercase tracking-wider text-gray-400 mb-2">Selected OPL Destination Root</label>
+                                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                                    <div class="flex-1 bg-darkbg/90 px-4 py-3 rounded-lg border border-gray-800 min-w-0 flex items-center">
+                                        <span id="dest-path-display" class="font-mono text-sm text-gray-400 truncate w-full" title="No OPL Destination Selected">No OPL Destination Selected</span>
+                                    </div>
+                                    <button onclick="pickFolder('destination')" id="btn-dest" class="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-lg text-sm font-extrabold transition shadow-lg flex items-center justify-center gap-2 border border-emerald-400/40">
+                                        <span>🎯</span> Browse OPL Destination
+                                    </button>
+                                </div>
                             </div>
 
-                            <!-- Destination Drive Space & Filesystem Bar -->
+                            <!-- Mode B: Internal PS2 APA/PFS Hard Drive -->
+                            <div id="dest-pfs-panel" class="hidden space-y-3.5">
+                                <!-- Admin Elevation Status Banner -->
+                                <div id="pfs-admin-banner" class="rounded-lg px-3.5 py-2.5 border text-xs flex flex-wrap items-center justify-between gap-2.5 bg-amber-950/40 border-amber-500/40 text-amber-200">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span id="pfs-admin-icon" class="text-base">🛡️</span>
+                                        <span id="pfs-admin-text">Checking Administrator privileges for raw PS2 HDD access...</span>
+                                    </div>
+                                    <button type="button" id="btn-pfs-elevate" onclick="restartAsAdmin()" class="hidden shrink-0 bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-1.5 rounded-lg font-extrabold text-xs transition shadow-md flex items-center gap-1.5">
+                                        <span>🛡️</span> Restart as Administrator
+                                    </button>
+                                </div>
+
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <label class="text-[11px] font-mono uppercase tracking-wider text-gray-400">Detected PlayStation 2 APA Drives</label>
+                                    <button type="button" id="btn-scan-pfs" onclick="scanPfsDrives()" class="bg-cyan-700 hover:bg-cyan-600 text-white px-4 py-1.5 rounded-lg text-xs font-extrabold transition shadow flex items-center gap-1.5 border border-cyan-400/40">
+                                        <span>🔍</span> Scan PS2 Drives
+                                    </button>
+                                </div>
+
+                                <div id="pfs-drives-list" class="space-y-2">
+                                    <div class="bg-darkbg/80 border border-gray-800 rounded-lg p-3.5 text-xs text-gray-400 text-center">
+                                        Click <strong>Scan PS2 Drives</strong> to detect connected APA/PFS formatted PlayStation 2 hard drives.
+                                    </div>
+                                </div>
+
+                                <div id="pfs-selected-info" class="hidden bg-darkbg/90 border border-cyan-500/35 rounded-lg px-3.5 py-2.5 text-xs flex flex-wrap items-center justify-between gap-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-cyan-300 font-mono font-extrabold" id="pfs-selected-dev-badge">hdd1:</span>
+                                        <span class="text-gray-300" id="pfs-selected-games-count">0 games installed</span>
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span id="pfs-opl-part-badge" class="font-mono text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-950/70 text-emerald-300 border border-emerald-500/40">✓ +OPL Partition Ready</span>
+                                        <button type="button" onclick="openPfsBrowser(selectedPfsDevice)" class="bg-cyan-800/80 hover:bg-cyan-600 text-white px-3 py-1 rounded-lg font-bold text-[11px] border border-cyan-400/40 transition flex items-center gap-1">
+                                            <span>📂</span> Browse Drive
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Destination Drive Space & Filesystem Bar (Shared by Folder & APA/PFS modes) -->
                             <div id="dest-drive-bar-container" class="hidden mt-5 pt-4 border-t border-gray-800/80 animate-[fadeIn_0.3s_ease-out]">
                                 <div class="flex flex-wrap justify-between items-center gap-2 text-xs mb-2">
                                     <div class="flex items-center gap-2">
@@ -530,11 +591,26 @@
                             <span class="text-xs font-mono font-extrabold text-emerald-400 uppercase tracking-widest">Step 5 of 7 • Compression &amp; Filesystem</span>
                             <span id="wizard-storage-est-badge" class="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-950/70 text-emerald-300 border border-emerald-500/30">Est. savings calculated on scan</span>
                         </div>
-                        <h3 class="ps2-title-font text-xl sm:text-2xl font-extrabold text-white mb-2">Compress games to .ZSO format?</h3>
-                        <p class="text-sm text-gray-300 mb-5 leading-relaxed">
+                        <h3 id="wizard-step5-heading" class="ps2-title-font text-xl sm:text-2xl font-extrabold text-white mb-2">Compress games to .ZSO format?</h3>
+                        <p id="wizard-step5-desc" class="text-sm text-gray-300 mb-5 leading-relaxed">
                             Modern Open PS2 Loader builds support LZ4-compressed <code class="text-emerald-300 font-mono">.ZSO</code> disc images—typically saving <strong>25%–40%</strong> drive space with no gameplay lag.
                         </p>
 
+                        <!-- Notice shown when targeting an APA/PFS PS2 HDD -->
+                        <div id="wizard-pfs-storage-notice" class="hidden bg-cyan-950/40 border border-cyan-500/40 rounded-xl p-5 mb-5 text-sm text-cyan-100 space-y-2">
+                            <div class="font-extrabold text-cyan-300 flex items-center gap-2">
+                                <span>💽</span> APA / PFS Internal PS2 HDD Mode Active
+                            </div>
+                            <p class="text-xs text-gray-300 leading-relaxed">
+                                Internal PS2 APA hard drives install games as raw <strong>HDLoader/OPL partitions</strong> via <code class="text-cyan-300 font-mono">hdl_dump</code> (<code class="font-mono">inject_dvd</code> / <code class="font-mono">inject_cd</code>), which require uncompressed <code class="text-blue-300 font-mono">.ISO</code> data and have no 4 GB file limit.
+                            </p>
+                            <ul class="text-xs text-gray-300 space-y-1 list-disc list-inside">
+                                <li><code class="text-emerald-300 font-mono">.ZSO</code> compression &amp; FAT32 splitting are automatically bypassed.</li>
+                                <li>Any existing <code class="text-amber-300 font-mono">.ZSO</code> files in your Source folder will be automatically decompressed to a temporary <code class="font-mono">.ISO</code> before injection.</li>
+                            </ul>
+                        </div>
+
+                        <div id="wizard-folder-storage-options">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
                             <div id="choice-comp-opl" onclick="setWizardOption('comp_choice', 'opl')" class="wizard-choice-card rounded-xl p-4 sm:p-5">
                                 <div class="flex items-center justify-between mb-2">
@@ -579,6 +655,7 @@
                                     <p class="text-[11px] text-gray-400 mt-1">Always copy whole files directly into <code class="font-mono">DVD/</code> (requires exFAT, NTFS, or SMB).</p>
                                 </div>
                             </div>
+                        </div>
                         </div>
                     </section>
 
@@ -773,6 +850,9 @@
                     </div>
                     
                     <div class="flex flex-wrap items-center gap-3">
+                        <button type="button" onclick="openPfsBrowser()" class="bg-gradient-to-r from-cyan-800/90 to-blue-800/90 hover:from-cyan-700 hover:to-blue-700 text-cyan-100 font-extrabold text-xs px-4 py-2 rounded-lg border border-cyan-400/50 shadow-[0_0_14px_rgba(0,210,255,0.2)] transition flex items-center gap-2">
+                            <span>💽</span> Browse PS2 HDD (APA / PFS)
+                        </button>
                         <button id="recent-tk-btn" onclick="rescanRecentToolkitPath()" class="hidden text-xs font-mono bg-purple-950/60 hover:bg-purple-900/80 text-purple-300 px-3 py-2 rounded-lg border border-purple-700/50 transition truncate max-w-[260px]" title="Re-scan last used Toolkit path">⚡ Recent Path</button>
                         <div class="flex items-center gap-4 bg-darkbg p-2 rounded-lg border border-gray-700/50 shadow-inner">
                             <span class="text-sm font-bold text-gray-400 pl-2 uppercase tracking-wide">Target Scope:</span>
@@ -785,6 +865,25 @@
                                 <span class="text-gray-300 font-medium transition">📁 Entire Folder</span>
                             </label>
                         </div>
+                    </div>
+                </div>
+
+                <!-- APA/PFS Internal PS2 HDD Quick Banner (in Manual Toolkit) -->
+                <div class="mb-5 bg-darkbg/90 border border-cyan-500/30 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-inner">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <span class="text-lg">💽</span>
+                        <div class="min-w-0">
+                            <div class="font-extrabold text-cyan-300 uppercase tracking-wider">APA / PFS PS2 Hard Drive Tools</div>
+                            <div class="text-gray-400">Browse <code class="text-cyan-300 font-mono">+OPL</code> files, manage installed HDL games, open the 3D Gallery, or run Art Scraper / CFG Generator / Drive Cleaner directly on a PS2 HDD.</div>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 shrink-0">
+                        <button type="button" onclick="openPfsBrowser()" class="bg-cyan-700 hover:bg-cyan-600 text-white font-bold px-3.5 py-1.5 rounded-lg border border-cyan-400/40 transition flex items-center gap-1.5">
+                            <span>📂</span> Open PFS Drive Browser
+                        </button>
+                        <button type="button" onclick="pickPfsForToolkitAction('art')" class="bg-orange-950/70 hover:bg-orange-800/80 text-orange-200 font-bold px-3 py-1.5 rounded-lg border border-orange-500/40 transition">🖼️ PFS Art</button>
+                        <button type="button" onclick="pickPfsForToolkitAction('cfg')" class="bg-teal-950/70 hover:bg-teal-800/80 text-teal-200 font-bold px-3 py-1.5 rounded-lg border border-teal-500/40 transition">📝 PFS CFG</button>
+                        <button type="button" onclick="pickPfsForToolkitAction('clean')" class="bg-rose-950/70 hover:bg-rose-800/80 text-rose-200 font-bold px-3 py-1.5 rounded-lg border border-rose-500/40 transition">🧹 PFS Clean</button>
                     </div>
                 </div>
 
@@ -1024,6 +1123,158 @@
 
     </div>
 
+    <!-- Interactive APA / PFS PS2 Hard Drive Browser Modal -->
+    <div id="pfs-browser-modal" class="fixed inset-0 bg-[#050814]/95 backdrop-blur-md hidden z-50 flex flex-col animate-[fadeIn_0.25s_ease-out] overflow-hidden">
+        <!-- Top Browser HUD -->
+        <div class="relative z-10 flex flex-wrap justify-between items-center gap-3 px-4 sm:px-6 py-3.5 bg-[#090f24]/95 border-b border-cyan-500/35 shadow-xl">
+            <div class="flex items-center gap-3 min-w-0">
+                <span class="text-2xl">💽</span>
+                <div class="min-w-0">
+                    <h2 class="text-base sm:text-lg font-extrabold text-white ps2-title-font tracking-wider truncate">PS2 APA / PFS Drive Browser</h2>
+                    <p id="pfs-browser-subtitle" class="text-cyan-400 text-xs font-mono truncate">Select a connected PlayStation 2 APA drive</p>
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <select id="pfs-browser-drive-select" onchange="pfsBrowserSelectDrive(this.value)" class="bg-darkbg text-cyan-200 font-mono text-xs font-bold px-3 py-2 rounded-lg border border-cyan-500/40 focus:outline-none">
+                    <option value="">-- No PS2 Drive Selected --</option>
+                </select>
+                <button type="button" onclick="pfsBrowserScanDrives()" id="pfs-browser-rescan-btn" class="bg-blue-900/80 hover:bg-blue-700 text-white px-3.5 py-2 rounded-lg font-bold text-xs border border-blue-400/40 transition flex items-center gap-1.5">
+                    <span>🔍</span> Rescan
+                </button>
+                <button type="button" onclick="pfsBrowserOpenGallery()" id="pfs-browser-gallery-btn" class="hidden bg-indigo-900/80 hover:bg-indigo-700 text-cyan-200 px-3.5 py-2 rounded-lg font-bold text-xs border border-cyan-400/40 transition flex items-center gap-1.5">
+                    <span class="ps-btn ps-triangle">△</span> 3D Gallery &amp; CFG
+                </button>
+                <button type="button" onclick="closePfsBrowser()" class="bg-[#162044] hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold border border-blue-400/30 transition text-xs flex items-center gap-1.5">
+                    <span class="ps-btn ps-circle">○</span> Close
+                </button>
+            </div>
+        </div>
+
+        <!-- Admin Warning + Drive Space Bar Strip -->
+        <div class="px-4 sm:px-6 py-3 bg-[#070d1f] border-b border-gray-800/80 space-y-2.5">
+            <div id="pfs-browser-admin-bar" class="hidden rounded-lg px-3.5 py-2 border border-amber-500/50 bg-amber-950/45 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2">
+                <span>⚠️ Administrator privileges are required to browse or modify raw PS2 APA/PFS hard drives.</span>
+                <button type="button" onclick="restartAsAdmin()" class="bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-1 rounded-lg font-extrabold text-xs transition">🛡️ Restart as Administrator</button>
+            </div>
+
+            <div id="pfs-browser-drive-hud" class="hidden flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <span id="pfs-browser-phys-badge" class="font-mono font-bold px-2.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">\\.\PhysicalDrive?</span>
+                    <span id="pfs-browser-space-label" class="text-gray-200 font-semibold">0 GB Free</span>
+                    <span id="pfs-browser-opl-badge" class="font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-950/70 text-emerald-300 border border-emerald-500/40">✓ +OPL Ready</span>
+                    <button type="button" id="pfs-browser-create-opl-btn" onclick="pfsBrowserCreateOpl()" class="hidden bg-amber-600 hover:bg-amber-500 text-white px-3 py-1 rounded-lg font-bold text-[11px] transition">+ Create +OPL (256 MB)</button>
+                </div>
+                <div class="w-full sm:w-64 bg-gray-800 rounded-full h-2 overflow-hidden">
+                    <div id="pfs-browser-used-bar" class="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Browser Tabs -->
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div class="flex flex-wrap gap-1.5">
+                    <button type="button" id="pfs-tab-games" onclick="switchPfsBrowserTab('games')" class="px-4 py-1.5 rounded-lg text-xs font-extrabold border transition bg-cyan-900/60 text-cyan-200 border-cyan-400/60">
+                        🎮 Installed HDL Games (<span id="pfs-tab-games-count">0</span>)
+                    </button>
+                    <button type="button" id="pfs-tab-files" onclick="switchPfsBrowserTab('files')" class="px-4 py-1.5 rounded-lg text-xs font-bold border transition bg-darkbg text-gray-400 border-gray-800 hover:text-white">
+                        📂 +OPL File Explorer
+                    </button>
+                    <button type="button" id="pfs-tab-parts" onclick="switchPfsBrowserTab('parts')" class="px-4 py-1.5 rounded-lg text-xs font-bold border transition bg-darkbg text-gray-400 border-gray-800 hover:text-white">
+                        💽 APA Partitions (<span id="pfs-tab-parts-count">0</span>)
+                    </button>
+                </div>
+                <div id="pfs-browser-quick-tools" class="hidden flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <button type="button" onclick="launchToolkitOnPfs('art')" class="bg-orange-950/70 hover:bg-orange-700 text-orange-200 font-bold px-2.5 py-1 rounded border border-orange-500/40 transition">🖼️ Scrape Art</button>
+                    <button type="button" onclick="launchToolkitOnPfs('cfg')" class="bg-teal-950/70 hover:bg-teal-700 text-teal-200 font-bold px-2.5 py-1 rounded border border-teal-500/40 transition">📝 Generate CFGs</button>
+                    <button type="button" onclick="launchToolkitOnPfs('clean')" class="bg-rose-950/70 hover:bg-rose-700 text-rose-200 font-bold px-2.5 py-1 rounded border border-rose-500/40 transition">🧹 Clean Orphan Art</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Browser Main Body -->
+        <div class="flex-1 overflow-hidden flex flex-col p-4 sm:p-6">
+            <!-- TAB 1: INSTALLED HDL GAMES -->
+            <div id="pfs-panel-games" class="flex-1 flex flex-col overflow-hidden">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <input type="text" id="pfs-games-search" oninput="renderPfsBrowserGames()" placeholder="🔍 Filter installed games by title or Game ID..." class="bg-darkbg text-gray-200 text-xs px-3.5 py-2 rounded-lg border border-gray-700 focus:border-cyan-500 focus:outline-none w-full sm:w-80">
+                    <span class="text-xs text-gray-400 font-mono" id="pfs-games-status">Select a PS2 drive above to list installed HDL games.</span>
+                </div>
+                <div class="flex-1 bg-panel rounded-xl border border-gray-800 overflow-auto shadow-inner">
+                    <table class="w-full text-left border-collapse whitespace-nowrap text-xs sm:text-sm">
+                        <thead class="bg-gray-800/90 sticky top-0 z-10 text-xs text-gray-400 uppercase">
+                            <tr>
+                                <th class="px-4 py-2.5">Game Title</th>
+                                <th class="px-4 py-2.5 text-center">Game ID</th>
+                                <th class="px-4 py-2.5 text-center">Media</th>
+                                <th class="px-4 py-2.5 text-center">Size</th>
+                                <th class="px-4 py-2.5 text-center">DMA</th>
+                                <th class="px-4 py-2.5 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pfs-games-tbody" class="divide-y divide-gray-800/50">
+                            <tr><td colspan="6" class="px-4 py-10 text-center text-gray-500 text-xs">No PS2 drive loaded yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB 2: +OPL / PFS FILE EXPLORER -->
+            <div id="pfs-panel-files" class="hidden flex-1 flex flex-col overflow-hidden">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3 bg-darkbg/90 p-3 rounded-xl border border-gray-800">
+                    <div class="flex flex-wrap items-center gap-2 min-w-0">
+                        <select id="pfs-explorer-part-select" onchange="pfsExplorerSwitchPartition(this.value)" class="bg-panel text-emerald-300 font-mono text-xs font-bold px-2.5 py-1.5 rounded-lg border border-emerald-500/40 focus:outline-none">
+                            <option value="+OPL">+OPL</option>
+                        </select>
+                        <button type="button" onclick="pfsExplorerGoUp()" id="pfs-explorer-up-btn" class="bg-panel hover:bg-gray-800 text-gray-200 text-xs font-bold px-2.5 py-1.5 rounded-lg border border-gray-700 transition">⬆ Up</button>
+                        <div id="pfs-explorer-breadcrumbs" class="flex flex-wrap items-center gap-1 font-mono text-xs text-cyan-300 bg-black/40 px-3 py-1.5 rounded-lg border border-gray-800">
+                            <span>/</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <input type="file" id="pfs-explorer-upload-input" class="hidden" onchange="pfsExplorerHandleUpload(event)">
+                        <button type="button" onclick="pfsExplorerLoadDir()" class="bg-panel hover:bg-gray-800 text-gray-200 text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-700 transition">🔄 Refresh</button>
+                        <button type="button" onclick="pfsExplorerPromptMkdir()" class="bg-blue-900/70 hover:bg-blue-700 text-blue-100 text-xs font-bold px-3 py-1.5 rounded-lg border border-blue-500/40 transition">📁 New Folder</button>
+                        <button type="button" onclick="document.getElementById('pfs-explorer-upload-input').click()" class="bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-extrabold px-3.5 py-1.5 rounded-lg border border-emerald-400/40 transition">📤 Upload File</button>
+                    </div>
+                </div>
+                <div class="flex-1 bg-panel rounded-xl border border-gray-800 overflow-auto shadow-inner">
+                    <table class="w-full text-left border-collapse whitespace-nowrap text-xs sm:text-sm">
+                        <thead class="bg-gray-800/90 sticky top-0 z-10 text-xs text-gray-400 uppercase">
+                            <tr>
+                                <th class="px-4 py-2.5">Name</th>
+                                <th class="px-4 py-2.5 text-center">Type</th>
+                                <th class="px-4 py-2.5 text-center">Size</th>
+                                <th class="px-4 py-2.5 text-center">Modified</th>
+                                <th class="px-4 py-2.5 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pfs-files-tbody" class="divide-y divide-gray-800/50 font-mono text-xs">
+                            <tr><td colspan="5" class="px-4 py-10 text-center text-gray-500">Select a PS2 drive with a +OPL partition to browse files.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB 3: APA PARTITIONS OVERVIEW -->
+            <div id="pfs-panel-parts" class="hidden flex-1 flex flex-col overflow-hidden">
+                <div class="flex-1 bg-panel rounded-xl border border-gray-800 overflow-auto shadow-inner">
+                    <table class="w-full text-left border-collapse whitespace-nowrap text-xs sm:text-sm">
+                        <thead class="bg-gray-800/90 sticky top-0 z-10 text-xs text-gray-400 uppercase">
+                            <tr>
+                                <th class="px-4 py-2.5">Partition Name</th>
+                                <th class="px-4 py-2.5 text-center">Type</th>
+                                <th class="px-4 py-2.5 text-center">Allocated Size</th>
+                                <th class="px-4 py-2.5 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pfs-parts-tbody" class="divide-y divide-gray-800/50 font-mono text-xs">
+                            <tr><td colspan="4" class="px-4 py-10 text-center text-gray-500">No APA partitions loaded.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modern Web-Based 3D Art Gallery & Viewer Modal -->
     <div id="gallery-modal" class="fixed inset-0 bg-[#050814] hidden z-50 flex flex-col animate-[fadeIn_0.3s_ease-out] overflow-hidden">
         <div id="gallery-backdrop" class="absolute inset-0 bg-cover bg-center filter blur-xl grayscale-[70%] brightness-[0.25] pointer-events-none z-0"></div>
@@ -1258,23 +1509,25 @@
                     <h3 class="text-xl font-extrabold text-gray-100 flex items-center gap-2">
                         <span>⚡</span> PS2 ISO Manager
                     </h3>
-                    <p class="text-xs text-blue-400 font-mono mt-0.5">Version 1.0.0 (Open Source Web Edition)</p>
+                    <p class="text-xs text-cyan-400 font-mono mt-0.5">Version 1.5 (Open Source Desktop Edition)</p>
                 </div>
                 <button onclick="closeAboutModal()" class="text-gray-400 hover:text-white text-lg font-bold px-2">✕</button>
             </div>
             <div class="text-sm text-gray-300 space-y-4 max-h-96 overflow-y-auto pr-2">
                 <p class="leading-relaxed">
-                    A high-performance desktop utility designed to manage, convert, compress, rename, and organize PlayStation 2 game libraries for <strong>Open PS2 Loader (OPL)</strong>.
+                    A high-performance desktop utility designed to manage, convert, compress, rename, and organize PlayStation 2 game libraries for <strong>Open PS2 Loader (OPL)</strong> across USB, exFAT/FAT32, SMB, and internal <strong>APA / PFS</strong> PlayStation 2 hard drives.
                 </p>
                 <div class="border-t border-gray-800 pt-3">
-                    <h4 class="text-xs font-extrabold text-blue-400 uppercase tracking-widest mb-3">Program Attributions & Credits</h4>
+                    <h4 class="text-xs font-extrabold text-blue-400 uppercase tracking-widest mb-3">Program Attributions &amp; Credits</h4>
                     <ul class="space-y-2.5 text-xs text-gray-400">
                         <li><strong class="text-gray-200">Open PS2 Loader (OPL):</strong> The community standard software loader platform for the PlayStation 2.</li>
+                        <li><strong class="text-gray-200">hdl_dump (ps2homebrew — The W1zard 0f 0z &amp; AKuHAK):</strong> Open-source APA/HDL partition game installer, TOC reader, and title manager for internal PS2 hard drives.</li>
+                        <li><strong class="text-gray-200">pfsshell (ps2homebrew — uyjulian, Wizard of Oz &amp; PS2SDK):</strong> PlayStation File System (PFS) shell and <code class="font-mono text-gray-300">ps2sdk</code> APA/PFS/iomanX libraries powering <code class="font-mono text-cyan-300">+OPL</code> drive browsing, artwork/CFG uploads, and partition management.</li>
                         <li><strong class="text-gray-200">Luden02 OPL Art Database:</strong> Structured static Game ID artwork repositories used for automated cover, disc, and background scraping.</li>
                         <li><strong class="text-gray-200">xlenore ps2-covers:</strong> Foundational cover art mapping schemas and community layouts.</li>
-                        <li><strong class="text-gray-200">ZSO Compression Tool (ziso):</strong> Fast, efficient OPL-compatible ISO compression format and binaries.</li>
-                        <li><strong class="text-gray-200">bchunk utility:</strong> Reliable BIN/CUE track conversion mapping for multi-track optical disc rips.</li>
-                        <li><strong class="text-gray-200">Three.js & OrbitControls:</strong> Powers the hardware-accelerated 3D WebGL game case and rotating optical disc preview system.</li>
+                        <li><strong class="text-gray-200">ZSO Compression Tool (ziso):</strong> Fast, efficient OPL-compatible LZ4 ISO compression and decompression utility.</li>
+                        <li><strong class="text-gray-200">bchunk &amp; MAME chdman:</strong> Reliable BIN/CUE track conversion and Compressed Hunks of Data (<code class="font-mono text-gray-300">.CHD</code>) disc image extraction tools.</li>
+                        <li><strong class="text-gray-200">Three.js &amp; OrbitControls:</strong> Powers the hardware-accelerated 3D WebGL game case and rotating optical disc preview system.</li>
                     </ul>
                 </div>
                 <div class="border-t border-gray-800 pt-3 text-xs text-gray-400">
@@ -1705,20 +1958,30 @@
             progBar.classList.remove('bg-emerald-500');
 
             let flatItems = [];
-            if (action === 'clean') {
-                // Cleaner needs full drive context in one pass
+            if (action === 'clean' || listData.is_pfs) {
+                // Cleaner and APA/PFS drives run in a single pass (pfsshell must never be invoked concurrently)
                 const previewRes = await fetch('/api/toolkit-preview', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         target_path: targetPath,
                         action: action,
+                        art_mode: artModeVal,
+                        cfg_mode: cfgModeVal,
                         clean_mode: cleanModeVal
                     })
                 });
                 const previewData = await previewRes.json();
+                if (previewData.error) {
+                    progContainer.classList.add('hidden');
+                    showAppNotice(previewData.error, "APA/PFS Scan Error", "error");
+                    return;
+                }
+                if (previewData.warning) {
+                    showAppNotice(previewData.warning, "+OPL Partition Notice", "warning");
+                }
                 flatItems = previewData.items || [];
-                progText.textContent = `${files.length}/${files.length} Loading`;
+                progText.textContent = `${flatItems.length} item(s) scanned`;
                 progBar.style.width = '100%';
             } else {
                 const resultsByIndex = new Array(files.length);
@@ -2321,24 +2584,44 @@
             }
         }
 
+        let cfgDirectContext = null; // Optional { targetPath, rawIdInternal, title } when opened from PFS Browser
+
+        function _activeCfgContext() {
+            if (cfgDirectContext) return cfgDirectContext;
+            if (selectedGalleryIdx !== null && cachedGalleryData[selectedGalleryIdx] && tkActivePath) {
+                const g = cachedGalleryData[selectedGalleryIdx];
+                return {
+                    targetPath: tkActivePath,
+                    rawIdInternal: g.raw_id_internal || g.raw_id.replace('-', '_'),
+                    title: g.title || '',
+                    developer: g.developer || '',
+                    publisher: g.publisher || '',
+                    release_date: g.release_date || '',
+                    genre: g.genre || ''
+                };
+            }
+            return null;
+        }
+
         function setCfgVmcPreset(preset) {
             const input = document.getElementById('cfg-field-vmc0');
             if (!input) return;
             if (preset === 'shared') {
                 input.value = 'generic_0';
             } else if (preset === 'dedicated') {
-                const g = cachedGalleryData[selectedGalleryIdx];
-                const rawIdInternal = g ? (g.raw_id_internal || g.raw_id.replace('-', '_')) : 'GAME_0';
+                const ctx = _activeCfgContext();
+                const rawIdInternal = ctx ? ctx.rawIdInternal : 'GAME_0';
                 input.value = `${rawIdInternal}_0`;
             } else {
                 input.value = '';
             }
         }
 
-        async function openCfgEditorModal() {
-            if (selectedGalleryIdx === null || !cachedGalleryData[selectedGalleryIdx] || !tkActivePath) return;
-            const g = cachedGalleryData[selectedGalleryIdx];
-            const rawIdInternal = g.raw_id_internal || g.raw_id.replace('-', '_');
+        async function openCfgEditorModal(directCtx = null) {
+            cfgDirectContext = directCtx || null;
+            const ctx = _activeCfgContext();
+            if (!ctx) return;
+            const rawIdInternal = ctx.rawIdInternal;
             document.getElementById('cfg-modal-id').textContent = `CFG/${rawIdInternal}.cfg`;
             document.getElementById('cfg-save-feedback').textContent = '';
             const dedBtn = document.getElementById('cfg-vmc-dedicated-btn');
@@ -2348,15 +2631,15 @@
                 const res = await fetch('/api/get-game-cfg', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ target_path: tkActivePath, raw_id: rawIdInternal })
+                    body: JSON.stringify({ target_path: ctx.targetPath, raw_id: rawIdInternal })
                 });
                 const data = await res.json();
                 const cfg = data.cfg || {};
-                document.getElementById('cfg-field-title').value = cfg.Title || g.title || '';
-                document.getElementById('cfg-field-dev').value = cfg.Developer || g.developer || '';
-                document.getElementById('cfg-field-pub').value = cfg.Publisher || g.publisher || '';
-                document.getElementById('cfg-field-release').value = cfg.Release || g.release_date || '';
-                document.getElementById('cfg-field-genre').value = cfg.Genre || g.genre || '';
+                document.getElementById('cfg-field-title').value = cfg.Title || ctx.title || '';
+                document.getElementById('cfg-field-dev').value = cfg.Developer || ctx.developer || '';
+                document.getElementById('cfg-field-pub').value = cfg.Publisher || ctx.publisher || '';
+                document.getElementById('cfg-field-release').value = cfg.Release || ctx.release_date || '';
+                document.getElementById('cfg-field-genre').value = cfg.Genre || ctx.genre || '';
                 document.getElementById('cfg-field-desc').value = cfg.Description || '';
                 document.getElementById('cfg-field-vmc0').value = cfg['$VMC_0'] || '';
 
@@ -2376,13 +2659,14 @@
         }
 
         function closeCfgEditorModal() {
+            cfgDirectContext = null;
             document.getElementById('cfg-editor-modal').classList.add('hidden');
         }
 
         async function saveCurrentGameCfg() {
-            if (selectedGalleryIdx === null || !cachedGalleryData[selectedGalleryIdx] || !tkActivePath) return;
-            const g = cachedGalleryData[selectedGalleryIdx];
-            const rawIdInternal = g.raw_id_internal || g.raw_id.replace('-', '_');
+            const ctx = _activeCfgContext();
+            if (!ctx) return;
+            const rawIdInternal = ctx.rawIdInternal;
             let modeMask = 0;
             document.querySelectorAll('.cfg-mode-cb').forEach(cb => {
                 const modeNum = parseInt(cb.value, 10);
@@ -2411,7 +2695,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        target_path: tkActivePath,
+                        target_path: ctx.targetPath,
                         raw_id: rawIdInternal,
                         cfg_data: cfgPayload
                     })
@@ -2585,6 +2869,7 @@
                                 else if (msg.includes("[CUE]")) line.classList.add("text-cyan-400", "font-bold");
                                 else if (msg.includes("[SKIP]")) line.classList.add("text-gray-500", "italic");
                                 else if (msg.includes("[BCHUNK]") || msg.includes("[ZISO]") || msg.includes("[CHDMAN]")) line.classList.add("text-gray-400", "opacity-75", "pl-4");
+                                else if (msg.includes("[PFSSHELL]") || msg.includes("[HDL_DUMP]")) line.classList.add("text-cyan-300");
                                 else if (msg.includes("aborted")) line.classList.add("text-yellow-400", "font-bold");
                                 else line.classList.add("text-gray-300");
 
@@ -2626,6 +2911,537 @@
         }
 
 
+        // --- PHASE 2: INTERACTIVE PS2 APA / PFS DRIVE BROWSER ---
+        let pfsBrowserDevice = '';
+        let pfsBrowserInspectData = null;
+        let pfsBrowserTab = 'games';
+        let pfsExplorerPartition = '+OPL';
+        let pfsExplorerPath = '/';
+        let pfsExplorerEntries = [];
+        let pfsPendingToolkitAction = null;
+
+        function escapeHtml(str) {
+            return String(str ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+        }
+
+        async function openPfsBrowser(preselectDevice = '') {
+            pfsPendingToolkitAction = null;
+            document.getElementById('pfs-browser-modal').classList.remove('hidden');
+            await pfsBrowserScanDrives(preselectDevice || pfsBrowserDevice || selectedPfsDevice);
+        }
+
+        function closePfsBrowser() {
+            document.getElementById('pfs-browser-modal').classList.add('hidden');
+        }
+
+        async function pickPfsForToolkitAction(action) {
+            // If we already know an active PS2 HDD, run the toolkit preview directly on it!
+            const knownDev = pfsBrowserDevice || selectedPfsDevice;
+            if (knownDev) {
+                await launchToolkitOnPfs(action, knownDev);
+                return;
+            }
+            // Otherwise scan quickly; if 1 drive found run directly, else open Browser to pick
+            try {
+                const res = await fetch('/api/pfs/drives');
+                const data = await res.json();
+                const drives = data.drives || [];
+                if (drives.length === 1 && data.is_admin) {
+                    pfsBrowserDevice = drives[0].device;
+                    await launchToolkitOnPfs(action, drives[0].device);
+                    return;
+                }
+            } catch (e) {}
+            pfsPendingToolkitAction = action;
+            document.getElementById('pfs-browser-modal').classList.remove('hidden');
+            await pfsBrowserScanDrives('');
+        }
+
+        async function launchToolkitOnPfs(action, deviceOverride = '') {
+            const dev = deviceOverride || pfsBrowserDevice || selectedPfsDevice;
+            if (!dev) {
+                showAppNotice("Please select a PlayStation 2 APA/PFS drive first.", "No PS2 Drive Selected", "warning");
+                return;
+            }
+            closePfsBrowser();
+            switchMode('manual');
+            selectToolkitCard(action);
+            tkActiveAction = action;
+            tkActivePath = dev;
+            await renderToolkitPreview(action, dev);
+        }
+
+        async function pfsBrowserScanDrives(preferDevice = '') {
+            const sel = document.getElementById('pfs-browser-drive-select');
+            const adminBar = document.getElementById('pfs-browser-admin-bar');
+            const rescanBtn = document.getElementById('pfs-browser-rescan-btn');
+            const subEl = document.getElementById('pfs-browser-subtitle');
+
+            if (rescanBtn) { rescanBtn.disabled = true; rescanBtn.innerHTML = '<span>⏳</span> Scanning...'; }
+            try {
+                const res = await fetch('/api/pfs/drives');
+                const data = await res.json();
+                if (adminBar) adminBar.classList.toggle('hidden', Boolean(data.is_admin));
+                const drives = data.drives || [];
+                pfsDrivesCache = drives;
+
+                if (drives.length === 0) {
+                    sel.innerHTML = `<option value="">-- No PS2 APA Drives Found --</option>`;
+                    if (subEl) subEl.textContent = data.error || `No PlayStation 2 APA drives found (${data.total_scanned_drives || 0} disks scanned).`;
+                    document.getElementById('pfs-browser-drive-hud').classList.add('hidden');
+                    document.getElementById('pfs-browser-gallery-btn').classList.add('hidden');
+                    document.getElementById('pfs-browser-quick-tools').classList.add('hidden');
+                    document.getElementById('pfs-games-tbody').innerHTML = `<tr><td colspan="6" class="px-4 py-10 text-center text-gray-400 text-xs">${escapeHtml(data.error || 'Connect an APA/PFS formatted PS2 drive and click Rescan.')}</td></tr>`;
+                    document.getElementById('pfs-files-tbody').innerHTML = `<tr><td colspan="5" class="px-4 py-10 text-center text-gray-500 text-xs">No PS2 drive loaded.</td></tr>`;
+                    document.getElementById('pfs-parts-tbody').innerHTML = `<tr><td colspan="4" class="px-4 py-10 text-center text-gray-500 text-xs">No PS2 drive loaded.</td></tr>`;
+                    return;
+                }
+
+                sel.innerHTML = drives.map(d => `<option value="${d.device}">${d.device} — ${d.size_fmt} (${d.physical_drive})</option>`).join('');
+                const targetDev = (preferDevice && drives.some(d => d.device === preferDevice)) ? preferDevice : drives[0].device;
+                sel.value = targetDev;
+                await pfsBrowserSelectDrive(targetDev);
+            } catch (err) {
+                showAppNotice(`Failed scanning PS2 drives: ${err}`, "Scan Error", "error");
+            } finally {
+                if (rescanBtn) { rescanBtn.disabled = false; rescanBtn.innerHTML = '<span>🔍</span> Rescan'; }
+            }
+        }
+
+        async function pfsBrowserSelectDrive(device) {
+            if (!device) return;
+            pfsBrowserDevice = device;
+            const subEl = document.getElementById('pfs-browser-subtitle');
+            if (subEl) subEl.textContent = `Inspecting ${device}...`;
+
+            try {
+                const res = await fetch('/api/pfs/inspect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device })
+                });
+                const data = await res.json();
+                if (data.error) {
+                    showAppNotice(data.error, "PS2 Drive Inspect Error", "error");
+                    return;
+                }
+                pfsBrowserInspectData = data;
+                const dInfo = data.drive_info || {};
+                const hasOpl = Boolean(data.has_opl_partition);
+
+                if (subEl) subEl.textContent = `${data.device} (${data.physical_drive}) • ${(data.games || []).length} HDL Game(s) • ${(data.partitions_detail || []).length} Partition(s)`;
+                document.getElementById('pfs-browser-drive-hud').classList.remove('hidden');
+                document.getElementById('pfs-browser-gallery-btn').classList.remove('hidden');
+                document.getElementById('pfs-browser-quick-tools').classList.remove('hidden');
+                document.getElementById('pfs-browser-phys-badge').textContent = data.physical_drive;
+                document.getElementById('pfs-browser-space-label').textContent = `${dInfo.free_fmt || '0 B'} Free of ${dInfo.total_fmt || '0 B'} (${dInfo.used_pct || 0}% Used)`;
+                document.getElementById('pfs-browser-used-bar').style.width = `${Math.min(100, dInfo.used_pct || 0)}%`;
+
+                const oplBadge = document.getElementById('pfs-browser-opl-badge');
+                const createOplBtn = document.getElementById('pfs-browser-create-opl-btn');
+                if (hasOpl) {
+                    oplBadge.textContent = '✓ +OPL Partition Ready';
+                    oplBadge.className = 'font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-950/70 text-emerald-300 border border-emerald-500/40';
+                    createOplBtn.classList.add('hidden');
+                } else {
+                    oplBadge.textContent = '⚠️ +OPL Partition Missing';
+                    oplBadge.className = 'font-mono font-bold px-2.5 py-0.5 rounded-full bg-amber-950/70 text-amber-300 border border-amber-500/40';
+                    createOplBtn.classList.remove('hidden');
+                }
+
+                // Populate PFS partition dropdown for File Explorer
+                const pfsParts = (data.partitions_detail || []).filter(p => p.is_pfs);
+                const partSel = document.getElementById('pfs-explorer-part-select');
+                if (pfsParts.length > 0) {
+                    partSel.innerHTML = pfsParts.map(p => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)} (${escapeHtml(p.size_fmt)})</option>`).join('');
+                    pfsExplorerPartition = pfsParts.some(p => p.name.toUpperCase() === '+OPL') ? '+OPL' : pfsParts[0].name;
+                    partSel.value = pfsExplorerPartition;
+                } else {
+                    partSel.innerHTML = `<option value="+OPL">+OPL (Not Created)</option>`;
+                    pfsExplorerPartition = '+OPL';
+                }
+                pfsExplorerPath = '/';
+
+                document.getElementById('pfs-tab-games-count').textContent = String((data.games || []).length);
+                document.getElementById('pfs-tab-parts-count').textContent = String((data.partitions_detail || []).length);
+
+                renderPfsBrowserGames();
+                renderPfsBrowserParts();
+
+                if (pfsPendingToolkitAction) {
+                    const pendingAct = pfsPendingToolkitAction;
+                    pfsPendingToolkitAction = null;
+                    await launchToolkitOnPfs(pendingAct, data.device);
+                    return;
+                }
+
+                if (pfsBrowserTab === 'files') {
+                    await pfsExplorerLoadDir();
+                }
+            } catch (err) {
+                showAppNotice(`Error inspecting ${device}: ${err}`, "Inspect Error", "error");
+            }
+        }
+
+        async function switchPfsBrowserTab(tab) {
+            pfsBrowserTab = tab;
+            const activeCls = 'px-4 py-1.5 rounded-lg text-xs font-extrabold border transition bg-cyan-900/60 text-cyan-200 border-cyan-400/60';
+            const idleCls = 'px-4 py-1.5 rounded-lg text-xs font-bold border transition bg-darkbg text-gray-400 border-gray-800 hover:text-white';
+            ['games', 'files', 'parts'].forEach(t => {
+                const btn = document.getElementById(`pfs-tab-${t}`);
+                const panel = document.getElementById(`pfs-panel-${t}`);
+                if (btn) btn.className = (t === tab) ? activeCls : idleCls;
+                if (panel) panel.classList.toggle('hidden', t !== tab);
+            });
+            if (tab === 'files' && pfsBrowserDevice) {
+                await pfsExplorerLoadDir();
+            }
+        }
+
+        function renderPfsBrowserGames() {
+            const tbody = document.getElementById('pfs-games-tbody');
+            const statusEl = document.getElementById('pfs-games-status');
+            const q = (document.getElementById('pfs-games-search')?.value || '').toLowerCase().trim();
+            const games = (pfsBrowserInspectData?.games || []).filter(g => {
+                if (!q) return true;
+                return (g.title || '').toLowerCase().includes(q) || (g.raw_id || '').toLowerCase().includes(q);
+            });
+            if (statusEl) statusEl.textContent = `Showing ${games.length} of ${(pfsBrowserInspectData?.games || []).length} installed game(s)`;
+            if (games.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-10 text-center text-gray-500 text-xs">No installed HDL games match your filter.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = games.map((g, i) => {
+                const safeTitle = escapeHtml(g.title || g.raw_id);
+                const safeId = escapeHtml(g.raw_id || 'Unknown');
+                const encTitle = encodeURIComponent(g.title || '');
+                const encPart = encodeURIComponent(g.partition_name || '');
+                const mediaCls = g.media === 'CD' ? 'bg-blue-900/50 text-blue-300 border-blue-500/40' : 'bg-purple-900/50 text-purple-300 border-purple-500/40';
+                return `
+                    <tr class="hover:bg-gray-800/45 transition">
+                        <td class="px-4 py-2.5 font-semibold text-gray-100 max-w-[32vw] truncate" title="${safeTitle}">${safeTitle}</td>
+                        <td class="px-4 py-2.5 text-center font-mono text-cyan-300 text-xs">${safeId}</td>
+                        <td class="px-4 py-2.5 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${mediaCls}">${escapeHtml(g.media)}</span></td>
+                        <td class="px-4 py-2.5 text-center font-mono text-gray-300 text-xs">${escapeHtml(g.size_fmt)}</td>
+                        <td class="px-4 py-2.5 text-center font-mono text-gray-400 text-xs">${escapeHtml(g.dma)}</td>
+                        <td class="px-4 py-2.5 text-right">
+                            <div class="inline-flex items-center gap-1.5">
+                                <button type="button" onclick="openCfgEditorModal({ targetPath: pfsBrowserDevice, rawIdInternal: '${safeId}', title: decodeURIComponent('${encTitle}') })" class="bg-teal-900/70 hover:bg-teal-600 text-teal-100 text-[11px] font-bold px-2.5 py-1 rounded border border-teal-500/40 transition" title="Edit OPL CFG & Compatibility Modes">⚙️ CFG</button>
+                                <button type="button" onclick="pfsBrowserRenameGame(decodeURIComponent('${encTitle}'))" class="bg-blue-900/70 hover:bg-blue-600 text-blue-100 text-[11px] font-bold px-2.5 py-1 rounded border border-blue-500/40 transition" title="Rename HDL game title">✏️ Rename</button>
+                                ${g.partition_name ? `<button type="button" onclick="pfsBrowserDeleteGame(decodeURIComponent('${encPart}'), decodeURIComponent('${encTitle}'))" class="bg-rose-950/80 hover:bg-rose-600 text-rose-200 text-[11px] font-bold px-2.5 py-1 rounded border border-rose-500/40 transition" title="Delete game partition (${escapeHtml(g.partition_name)})">🗑️</button>` : ''}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderPfsBrowserParts() {
+            const tbody = document.getElementById('pfs-parts-tbody');
+            const parts = pfsBrowserInspectData?.partitions_detail || [];
+            if (parts.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-10 text-center text-gray-500 text-xs">No APA partitions reported.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = parts.map(p => {
+                const badgeCls = p.is_pfs
+                    ? 'bg-emerald-950/70 text-emerald-300 border-emerald-500/40'
+                    : (p.is_hdl ? 'bg-purple-950/70 text-purple-300 border-purple-500/40' : 'bg-gray-800 text-gray-300 border-gray-600');
+                const encName = encodeURIComponent(p.name);
+                return `
+                    <tr class="hover:bg-gray-800/45 transition">
+                        <td class="px-4 py-2.5 font-bold text-gray-200">${escapeHtml(p.name)}</td>
+                        <td class="px-4 py-2.5 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold border ${badgeCls}">${escapeHtml(p.type_label)} (${escapeHtml(p.type_hex)})</span></td>
+                        <td class="px-4 py-2.5 text-center text-gray-300">${escapeHtml(p.size_fmt)}</td>
+                        <td class="px-4 py-2.5 text-right">
+                            ${p.is_pfs ? `<button type="button" onclick="pfsExplorerOpenPartition(decodeURIComponent('${encName}'))" class="bg-cyan-900/70 hover:bg-cyan-600 text-cyan-100 text-[11px] font-bold px-3 py-1 rounded border border-cyan-500/40 transition">📂 Browse Files</button>` : `<span class="text-gray-600 text-[11px]">${p.is_system ? 'System' : 'HDL Raw'}</span>`}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function pfsExplorerOpenPartition(partName) {
+            pfsExplorerPartition = partName;
+            pfsExplorerPath = '/';
+            const sel = document.getElementById('pfs-explorer-part-select');
+            if (sel) sel.value = partName;
+            await switchPfsBrowserTab('files');
+        }
+
+        async function pfsExplorerSwitchPartition(partName) {
+            pfsExplorerPartition = partName || '+OPL';
+            pfsExplorerPath = '/';
+            await pfsExplorerLoadDir();
+        }
+
+        async function pfsExplorerLoadDir() {
+            const tbody = document.getElementById('pfs-files-tbody');
+            const crumbs = document.getElementById('pfs-explorer-breadcrumbs');
+            if (!pfsBrowserDevice) return;
+
+            tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-8 text-center text-cyan-300 text-xs animate-pulse">Reading ${escapeHtml(pfsExplorerPartition)}:${escapeHtml(pfsExplorerPath)}...</td></tr>`;
+            try {
+                const res = await fetch('/api/pfs/ls', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device: pfsBrowserDevice, partition: pfsExplorerPartition, path: pfsExplorerPath })
+                });
+                const data = await res.json();
+                pfsExplorerPath = data.path || '/';
+                pfsExplorerEntries = data.entries || [];
+
+                // Render clickable breadcrumbs
+                const segs = data.segments || [];
+                let crumbHtml = `<button type="button" onclick="pfsExplorerNavigate('/')" class="hover:text-white underline font-bold">${escapeHtml(pfsExplorerPartition)}:/</button>`;
+                let running = '';
+                segs.forEach(s => {
+                    running += '/' + s;
+                    const target = running;
+                    crumbHtml += `<span class="text-gray-600">/</span><button type="button" onclick="pfsExplorerNavigate('${escapeHtml(target)}')" class="hover:text-white underline">${escapeHtml(s)}</button>`;
+                });
+                if (crumbs) crumbs.innerHTML = crumbHtml;
+
+                const upBtn = document.getElementById('pfs-explorer-up-btn');
+                if (upBtn) upBtn.disabled = (segs.length === 0);
+
+                if (data.error && pfsExplorerEntries.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-10 text-center text-amber-300 text-xs">${escapeHtml(data.error)}</td></tr>`;
+                    return;
+                }
+                if (pfsExplorerEntries.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-10 text-center text-gray-500 text-xs">This folder is empty. Click <strong>Upload File</strong> or <strong>New Folder</strong> above.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = pfsExplorerEntries.map(e => {
+                    const encName = encodeURIComponent(e.name);
+                    const nextPath = (pfsExplorerPath === '/' ? '' : pfsExplorerPath) + '/' + e.name;
+                    const encNext = encodeURIComponent(nextPath);
+                    const icon = e.is_dir ? '📁' : (e.is_image ? '🖼️' : (e.ext === '.cfg' ? '📝' : '📄'));
+                    return `
+                        <tr class="hover:bg-gray-800/45 transition">
+                            <td class="px-4 py-2">
+                                ${e.is_dir
+                                    ? `<button type="button" onclick="pfsExplorerNavigate(decodeURIComponent('${encNext}'))" class="text-cyan-300 hover:text-white font-bold flex items-center gap-2"><span>${icon}</span> <span>${escapeHtml(e.name)}/</span></button>`
+                                    : `<span class="text-gray-200 flex items-center gap-2"><span>${icon}</span> <span>${escapeHtml(e.name)}</span></span>`}
+                            </td>
+                            <td class="px-4 py-2 text-center text-gray-400">${e.is_dir ? 'DIR' : escapeHtml((e.ext || 'FILE').replace('.', '').toUpperCase())}</td>
+                            <td class="px-4 py-2 text-center text-gray-300">${escapeHtml(e.size_fmt)}</td>
+                            <td class="px-4 py-2 text-center text-gray-400">${escapeHtml(e.modified)}</td>
+                            <td class="px-4 py-2 text-right">
+                                <div class="inline-flex items-center gap-1.5">
+                                    ${e.is_image ? `<button type="button" onclick="pfsExplorerPreviewImage(decodeURIComponent('${encName}'))" class="bg-indigo-900/70 hover:bg-indigo-600 text-indigo-100 text-[11px] font-bold px-2.5 py-1 rounded border border-indigo-500/40 transition">👁️ View</button>` : ''}
+                                    ${!e.is_dir ? `<button type="button" onclick="pfsExplorerDownloadFile(decodeURIComponent('${encName}'))" class="bg-blue-900/70 hover:bg-blue-600 text-blue-100 text-[11px] font-bold px-2.5 py-1 rounded border border-blue-500/40 transition">⬇️ Save</button>` : ''}
+                                    <button type="button" onclick="pfsExplorerDeleteEntry(decodeURIComponent('${encName}'), ${e.is_dir ? 'true' : 'false'})" class="bg-rose-950/80 hover:bg-rose-600 text-rose-200 text-[11px] font-bold px-2.5 py-1 rounded border border-rose-500/40 transition" title="Delete ${escapeHtml(e.name)}">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-10 text-center text-red-400 text-xs">Failed listing directory: ${escapeHtml(err)}</td></tr>`;
+            }
+        }
+
+        async function pfsExplorerNavigate(path) {
+            pfsExplorerPath = path || '/';
+            await pfsExplorerLoadDir();
+        }
+
+        async function pfsExplorerGoUp() {
+            const parts = pfsExplorerPath.split('/').filter(Boolean);
+            parts.pop();
+            pfsExplorerPath = '/' + parts.join('/');
+            await pfsExplorerLoadDir();
+        }
+
+        async function pfsExplorerPreviewImage(filename) {
+            try {
+                const res = await fetch('/api/pfs/preview-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device: pfsBrowserDevice, partition: pfsExplorerPartition, path: pfsExplorerPath, filename })
+                });
+                const data = await res.json();
+                if (data.url) {
+                    openLightbox(data.url, `${pfsExplorerPartition}:${pfsExplorerPath}/${filename}`);
+                } else {
+                    showAppNotice(data.error || "Could not preview image.", "Preview Failed", "error");
+                }
+            } catch (err) {
+                showAppNotice(`Preview failed: ${err}`, "Preview Error", "error");
+            }
+        }
+
+        async function pfsExplorerDownloadFile(filename) {
+            try {
+                const res = await fetch('/api/pfs/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device: pfsBrowserDevice, partition: pfsExplorerPartition, path: pfsExplorerPath, filename })
+                });
+                if (!res.ok) {
+                    const errTxt = await res.text();
+                    showAppNotice(errTxt || "Download failed.", "Download Error", "error");
+                    return;
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+            } catch (err) {
+                showAppNotice(`Download failed: ${err}`, "Download Error", "error");
+            }
+        }
+
+        async function pfsExplorerPromptMkdir() {
+            if (!pfsBrowserDevice) return;
+            const folderName = window.prompt(`Create new folder inside ${pfsExplorerPartition}:${pfsExplorerPath}:`);
+            if (!folderName || !folderName.trim()) return;
+            try {
+                const res = await fetch('/api/pfs/mkdir', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device: pfsBrowserDevice, partition: pfsExplorerPartition, path: pfsExplorerPath, folder_name: folderName.trim() })
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    await pfsExplorerLoadDir();
+                } else {
+                    showAppNotice(data.error || "Could not create folder.", "Folder Error", "error");
+                }
+            } catch (err) {
+                showAppNotice(`Create folder failed: ${err}`, "Folder Error", "error");
+            }
+        }
+
+        function pfsExplorerHandleUpload(event) {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (!file || !pfsBrowserDevice) return;
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                try {
+                    const res = await fetch('/api/pfs/upload', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            device: pfsBrowserDevice,
+                            partition: pfsExplorerPartition,
+                            path: pfsExplorerPath,
+                            filename: file.name,
+                            data_b64: ev.target.result
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'ok') {
+                        await pfsExplorerLoadDir();
+                    } else {
+                        showAppNotice(data.error || "File upload failed.", "Upload Error", "error");
+                    }
+                } catch (err) {
+                    showAppNotice(`Upload failed: ${err}`, "Upload Error", "error");
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function pfsExplorerDeleteEntry(name, isDir) {
+            if (!pfsBrowserDevice) return;
+            const label = isDir ? `empty folder "${name}"` : `file "${name}"`;
+            if (!window.confirm(`Delete ${label} from ${pfsExplorerPartition}:${pfsExplorerPath}?`)) return;
+            try {
+                const res = await fetch('/api/pfs/rm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device: pfsBrowserDevice, partition: pfsExplorerPartition, path: pfsExplorerPath, name, is_dir: isDir })
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    await pfsExplorerLoadDir();
+                } else {
+                    showAppNotice(data.error || "Could not delete entry (folders must be empty).", "Delete Error", "error");
+                }
+            } catch (err) {
+                showAppNotice(`Delete failed: ${err}`, "Delete Error", "error");
+            }
+        }
+
+        async function pfsBrowserCreateOpl() {
+            if (!pfsBrowserDevice) return;
+            if (!window.confirm(`Create and format a 256 MB "+OPL" PFS partition on ${pfsBrowserDevice} (with ART/, CFG/, VMC/ folders)?`)) return;
+            try {
+                const res = await fetch('/api/pfs/create-opl', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device: pfsBrowserDevice, size_mb: 256 })
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    showAppNotice(`Created +OPL (256 MB) partition on ${pfsBrowserDevice}!`, "+OPL Ready", "success");
+                    await pfsBrowserSelectDrive(pfsBrowserDevice);
+                } else {
+                    showAppNotice(data.error || "Failed creating +OPL partition.", "Partition Error", "error");
+                }
+            } catch (err) {
+                showAppNotice(`Failed creating +OPL: ${err}`, "Partition Error", "error");
+            }
+        }
+
+        async function pfsBrowserRenameGame(currentTitle) {
+            if (!pfsBrowserDevice || !currentTitle) return;
+            const newTitle = window.prompt(`Rename HDL game on ${pfsBrowserDevice}:`, currentTitle);
+            if (!newTitle || !newTitle.trim() || newTitle.trim() === currentTitle) return;
+            try {
+                const res = await fetch('/api/pfs/rename-game', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device: pfsBrowserDevice, current_title: currentTitle, new_title: newTitle.trim() })
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    await pfsBrowserSelectDrive(pfsBrowserDevice);
+                } else {
+                    showAppNotice(data.error || "Failed renaming game.", "Rename Error", "error");
+                }
+            } catch (err) {
+                showAppNotice(`Rename error: ${err}`, "Rename Error", "error");
+            }
+        }
+
+        async function pfsBrowserDeleteGame(partitionName, title) {
+            if (!pfsBrowserDevice || !partitionName) return;
+            if (!window.confirm(`Permanently delete "${title}" (partition: ${partitionName}) from ${pfsBrowserDevice}?`)) return;
+            try {
+                const res = await fetch('/api/pfs/delete-game', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device: pfsBrowserDevice, partition_name: partitionName })
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    await pfsBrowserSelectDrive(pfsBrowserDevice);
+                } else {
+                    showAppNotice(data.error || "Failed deleting game partition.", "Delete Error", "error");
+                }
+            } catch (err) {
+                showAppNotice(`Delete error: ${err}`, "Delete Error", "error");
+            }
+        }
+
+        async function pfsBrowserOpenGallery() {
+            if (!pfsBrowserDevice) return;
+            tkActivePath = pfsBrowserDevice;
+            await openGalleryViewer();
+        }
+
+
         // --- AUTO PILOT LOGIC ---
         function copyTerminalLogs(targetId) {
             const terminalLog = document.getElementById(targetId);
@@ -2643,6 +3459,14 @@
         let existingDestFiles = [];
         let destDriveInfo = null;
         let currentSessionId = null;
+
+        // --- APA / PFS INTERNAL PS2 HDD STATE ---
+        let destMode = 'folder'; // 'folder' | 'pfs'
+        let selectedPfsDevice = '';
+        let pfsInstalledIds = [];
+        let pfsInstalledGamesCount = 0;
+        let pfsHasOplPartition = false;
+        let pfsDrivesCache = [];
 
         // --- AUTO PILOT GUIDED WIZARD STATE & NAVIGATION ---
         let wizardStep = 1;
@@ -2663,8 +3487,213 @@
         }
 
         function hasValidDest() {
+            if (destMode === 'pfs') {
+                return Boolean(selectedPfsDevice);
+            }
             const destPath = document.getElementById('dest-path-display')?.textContent || '';
             return Boolean(destPath && destPath !== 'No OPL Destination Selected' && !destPath.startsWith('Waiting'));
+        }
+
+        async function setDestMode(mode) {
+            if (wizardLocked) return;
+            destMode = (mode === 'pfs') ? 'pfs' : 'folder';
+
+            const folderBtn = document.getElementById('dest-mode-folder-btn');
+            const pfsBtn = document.getElementById('dest-mode-pfs-btn');
+            const folderPanel = document.getElementById('dest-folder-panel');
+            const pfsPanel = document.getElementById('dest-pfs-panel');
+            const recentDestBtn = document.getElementById('recent-dest-btn');
+
+            if (destMode === 'pfs') {
+                if (folderBtn) folderBtn.className = 'rounded-xl px-4 py-3 text-left border transition flex items-center gap-3 bg-panel/70 border-gray-700/70 text-gray-300 hover:border-emerald-400/60 hover:text-white';
+                if (pfsBtn) pfsBtn.className = 'rounded-xl px-4 py-3 text-left border transition flex items-center gap-3 bg-cyan-950/45 border-cyan-400/80 text-white shadow-[0_0_16px_rgba(0,210,255,0.22)]';
+                if (folderPanel) folderPanel.classList.add('hidden');
+                if (pfsPanel) pfsPanel.classList.remove('hidden');
+                if (recentDestBtn) recentDestBtn.classList.add('hidden');
+
+                if (!selectedPfsDevice) {
+                    destDriveInfo = null;
+                    updateDestDriveSpaceBar();
+                }
+                await refreshPfsStatus();
+            } else {
+                if (folderBtn) folderBtn.className = 'rounded-xl px-4 py-3 text-left border transition flex items-center gap-3 bg-emerald-950/40 border-emerald-400/70 text-white shadow-[0_0_16px_rgba(16,185,129,0.2)]';
+                if (pfsBtn) pfsBtn.className = 'rounded-xl px-4 py-3 text-left border transition flex items-center gap-3 bg-panel/70 border-gray-700/70 text-gray-300 hover:border-cyan-400/60 hover:text-white';
+                if (folderPanel) folderPanel.classList.remove('hidden');
+                if (pfsPanel) pfsPanel.classList.add('hidden');
+                renderRecentFolderChips();
+
+                const destPath = document.getElementById('dest-path-display')?.textContent || '';
+                if (destPath && destPath !== 'No OPL Destination Selected' && !destPath.startsWith('Waiting')) {
+                    await setDestinationFolder(destPath);
+                } else {
+                    destDriveInfo = null;
+                    updateDestDriveSpaceBar();
+                }
+            }
+
+            refreshPlan();
+            updateWizardUI();
+        }
+
+        async function refreshPfsStatus() {
+            const banner = document.getElementById('pfs-admin-banner');
+            const iconEl = document.getElementById('pfs-admin-icon');
+            const textEl = document.getElementById('pfs-admin-text');
+            const elevateBtn = document.getElementById('btn-pfs-elevate');
+            try {
+                const res = await fetch('/api/pfs/status');
+                const st = await res.json();
+                if (!st.hdl_dump_available) {
+                    if (banner) banner.className = 'rounded-lg px-3.5 py-2.5 border text-xs flex flex-wrap items-center justify-between gap-2.5 bg-red-950/50 border-red-500/40 text-red-200';
+                    if (iconEl) iconEl.textContent = '🛑';
+                    if (textEl) textEl.textContent = 'hdl_dump.exe was not found next to the app. Add hdl_dump.exe & pfsshell.exe to enable APA/PFS mode.';
+                    if (elevateBtn) elevateBtn.classList.add('hidden');
+                    return;
+                }
+                if (st.is_admin) {
+                    if (banner) banner.className = 'rounded-lg px-3.5 py-2.5 border text-xs flex flex-wrap items-center justify-between gap-2.5 bg-emerald-950/40 border-emerald-500/40 text-emerald-200';
+                    if (iconEl) iconEl.textContent = '✅';
+                    if (textEl) textEl.textContent = 'Running as Administrator — raw PS2 APA/PFS hard drive access is enabled.' + (st.pfsshell_available ? '' : ' (Note: pfsshell.exe missing, +OPL art/CFG upload unavailable)');
+                    if (elevateBtn) elevateBtn.classList.add('hidden');
+                    if (pfsDrivesCache.length === 0) {
+                        await scanPfsDrives();
+                    }
+                } else {
+                    if (banner) banner.className = 'rounded-lg px-3.5 py-2.5 border text-xs flex flex-wrap items-center justify-between gap-2.5 bg-amber-950/45 border-amber-500/50 text-amber-200';
+                    if (iconEl) iconEl.textContent = '⚠️';
+                    if (textEl) textEl.textContent = 'Administrator privileges are required by Windows to read/write raw PS2 APA/PFS hard drives.';
+                    if (elevateBtn) elevateBtn.classList.remove('hidden');
+                }
+            } catch (err) {
+                if (textEl) textEl.textContent = 'Could not check Administrator status.';
+            }
+        }
+
+        async function restartAsAdmin() {
+            const btn = document.getElementById('btn-pfs-elevate');
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Requesting UAC...'; }
+            try {
+                const res = await fetch('/api/pfs/restart-admin', { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'elevating') {
+                    showAppNotice("Relaunching PS2 ISO Manager with Administrator privileges...", "Elevating", "info");
+                } else if (data.status === 'already_admin') {
+                    await refreshPfsStatus();
+                } else {
+                    showAppNotice(data.error || "Administrator elevation was cancelled.", "UAC Cancelled", "warning");
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<span>🛡️</span> Restart as Administrator'; }
+                }
+            } catch (err) {
+                showAppNotice("Failed to trigger Administrator elevation. Try right-clicking PS2-ISO-Manager.exe and choosing 'Run as administrator'.", "Elevation Error", "error");
+                if (btn) { btn.disabled = false; btn.innerHTML = '<span>🛡️</span> Restart as Administrator'; }
+            }
+        }
+
+        async function scanPfsDrives() {
+            const listEl = document.getElementById('pfs-drives-list');
+            const scanBtn = document.getElementById('btn-scan-pfs');
+            if (scanBtn) { scanBtn.disabled = true; scanBtn.innerHTML = '<span>⏳</span> Scanning...'; }
+            if (listEl) {
+                listEl.innerHTML = `<div class="bg-darkbg/80 border border-cyan-500/30 rounded-lg p-3.5 text-xs text-cyan-300 text-center animate-pulse">Scanning physical drives for PlayStation 2 APA headers...</div>`;
+            }
+
+            try {
+                const res = await fetch('/api/pfs/drives');
+                const data = await res.json();
+                pfsDrivesCache = data.drives || [];
+
+                if (data.error) {
+                    listEl.innerHTML = `<div class="bg-amber-950/40 border border-amber-500/40 rounded-lg p-3.5 text-xs text-amber-200 text-center">${data.error}</div>`;
+                } else if (pfsDrivesCache.length === 0) {
+                    listEl.innerHTML = `<div class="bg-darkbg/80 border border-gray-800 rounded-lg p-4 text-xs text-gray-400 text-center">No PlayStation 2 APA-formatted drives found (${data.total_scanned_drives || 0} physical disk(s) checked).<br><span class="text-[11px] text-gray-500">Connect your PS2 HDD via SATA or USB adapter and click Scan PS2 Drives again.</span></div>`;
+                } else {
+                    renderPfsDriveCards();
+                }
+            } catch (err) {
+                if (listEl) listEl.innerHTML = `<div class="bg-red-950/40 border border-red-500/40 rounded-lg p-3.5 text-xs text-red-300 text-center">Error scanning drives: ${err}</div>`;
+            } finally {
+                if (scanBtn) { scanBtn.disabled = false; scanBtn.innerHTML = '<span>🔍</span> Scan PS2 Drives'; }
+            }
+        }
+
+        function renderPfsDriveCards() {
+            const listEl = document.getElementById('pfs-drives-list');
+            if (!listEl) return;
+            listEl.innerHTML = pfsDrivesCache.map(d => {
+                const isSel = selectedPfsDevice && selectedPfsDevice.toLowerCase() === d.device.toLowerCase();
+                const cls = isSel
+                    ? 'w-full rounded-lg p-3 border text-left transition flex flex-wrap items-center justify-between gap-2 bg-cyan-950/60 border-cyan-400 text-white shadow-[0_0_14px_rgba(0,210,255,0.25)]'
+                    : 'w-full rounded-lg p-3 border text-left transition flex flex-wrap items-center justify-between gap-2 bg-darkbg/85 border-gray-700/70 hover:border-cyan-400/60 text-gray-200';
+                return `
+                    <button type="button" onclick="selectPfsDrive('${d.device}')" class="${cls}">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <span class="text-xl">💽</span>
+                            <div class="min-w-0">
+                                <div class="font-mono font-extrabold text-sm flex items-center gap-2">
+                                    <span>${d.device}</span>
+                                    <span class="text-[10px] px-2 py-0.5 rounded bg-blue-950 text-cyan-300 border border-cyan-500/40">PS2 APA</span>
+                                </div>
+                                <div class="text-[11px] text-gray-400 font-mono truncate">${d.physical_drive} • ${d.size_fmt}</div>
+                            </div>
+                        </div>
+                        <span class="text-xs font-mono font-bold ${isSel ? 'text-cyan-300' : 'text-gray-400'}">${isSel ? '✓ Selected' : 'Select →'}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        async function selectPfsDrive(device) {
+            const infoEl = document.getElementById('pfs-selected-info');
+            const devBadge = document.getElementById('pfs-selected-dev-badge');
+            const countEl = document.getElementById('pfs-selected-games-count');
+            const oplBadge = document.getElementById('pfs-opl-part-badge');
+
+            if (infoEl) infoEl.classList.remove('hidden');
+            if (devBadge) devBadge.textContent = device;
+            if (countEl) countEl.textContent = 'Reading HDL Table of Contents & +OPL partition...';
+
+            try {
+                const res = await fetch('/api/pfs/inspect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device })
+                });
+                const data = await res.json();
+                if (data.error) {
+                    selectedPfsDevice = '';
+                    destDriveInfo = null;
+                    if (infoEl) infoEl.classList.add('hidden');
+                    showAppNotice(data.error, "PS2 HDD Inspect Error", "error");
+                    updateWizardUI();
+                    return;
+                }
+
+                selectedPfsDevice = data.device;
+                pfsInstalledIds = data.installed_ids || [];
+                pfsInstalledGamesCount = (data.games || []).length;
+                pfsHasOplPartition = Boolean(data.has_opl_partition);
+                destDriveInfo = data.drive_info || null;
+
+                if (countEl) countEl.textContent = `${pfsInstalledGamesCount} HDL game(s) currently installed`;
+                if (oplBadge) {
+                    if (pfsHasOplPartition) {
+                        oplBadge.textContent = '✓ +OPL Partition Ready (Art & CFG supported)';
+                        oplBadge.className = 'font-mono text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-950/70 text-emerald-300 border border-emerald-500/40';
+                    } else {
+                        oplBadge.textContent = '⚠️ No +OPL Partition (Games OK, Art/CFG skipped)';
+                        oplBadge.className = 'font-mono text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-950/70 text-amber-300 border border-amber-500/40';
+                    }
+                }
+
+                renderPfsDriveCards();
+                refreshPlan();
+                updateDestDriveSpaceBar();
+                updateAutoPilotSummary();
+                updateWizardUI();
+            } catch (err) {
+                showAppNotice(`Failed to inspect ${device}: ${err}`, "PS2 HDD Error", "error");
+            }
         }
 
         function canEnterWizardStep(step) {
@@ -2815,7 +3844,7 @@
 
             // Step 4: Live filename preview using first matched game or fallback
             const compChoice = document.querySelector('input[name="comp_choice"]:checked')?.value || 'opl';
-            const previewExt = (compChoice === 'opl') ? '.zso' : '.iso';
+            const previewExt = (destMode === 'pfs') ? '' : ((compChoice === 'opl') ? '.zso' : '.iso');
             const sample = currentFiles.find(f => f && f.clean_title && f.raw_id && f.raw_id !== 'Unknown');
             const sampleTitle = sample ? sample.clean_title : 'God of War';
             const sampleId = sample ? sample.raw_id.replace('_', '-') : 'SCUS-97399';
@@ -2824,10 +3853,25 @@
             if (withIdEl) withIdEl.textContent = `${sampleTitle} [${sampleId}]${previewExt}`;
             if (withoutIdEl) withoutIdEl.textContent = `${sampleTitle}${previewExt}`;
 
+            // Step 5: Toggle APA/PFS notice vs Folder ZSO/FAT32 options
+            const pfsNoticeEl = document.getElementById('wizard-pfs-storage-notice');
+            const folderStorageEl = document.getElementById('wizard-folder-storage-options');
+            const step5Head = document.getElementById('wizard-step5-heading');
+            const step5Desc = document.getElementById('wizard-step5-desc');
+            if (pfsNoticeEl && folderStorageEl) {
+                const isPfs = (destMode === 'pfs');
+                pfsNoticeEl.classList.toggle('hidden', !isPfs);
+                folderStorageEl.classList.toggle('hidden', isPfs);
+                if (step5Head) step5Head.textContent = isPfs ? 'APA / PFS Storage Format (Raw .ISO HDL Partitions)' : 'Compress games to .ZSO format?';
+                if (step5Desc) step5Desc.classList.toggle('hidden', isPfs);
+            }
+
             // Step 5: Estimated ZSO space savings & FAT32 filesystem badge
             const storageEstEl = document.getElementById('wizard-storage-est-badge');
             if (storageEstEl) {
-                if (compressibleBytes > 0) {
+                if (destMode === 'pfs') {
+                    storageEstEl.textContent = 'Raw .ISO HDL Partitions (APA/PFS)';
+                } else if (compressibleBytes > 0) {
                     const estSaved = Math.round(compressibleBytes * 0.28);
                     storageEstEl.textContent = `Est. ~${formatBytesHuman(estSaved)} saved with .ZSO`;
                 } else {
@@ -2851,7 +3895,9 @@
 
             // Step 7: Review summary tiles
             const srcText = document.getElementById('source-path-display')?.textContent || 'Not set';
-            const destText = document.getElementById('dest-path-display')?.textContent || 'Not set';
+            const destText = (destMode === 'pfs')
+                ? (selectedPfsDevice ? `APA/PFS (${selectedPfsDevice})` : 'Not selected')
+                : (document.getElementById('dest-path-display')?.textContent || 'Not set');
             const keepBin = document.getElementById('keep_bin')?.checked ?? false;
             const enableRename = document.getElementById('enable_rename')?.checked ?? true;
             const renameId = document.getElementById('rename_id')?.checked ?? true;
@@ -2864,8 +3910,10 @@
             setTxt('review-val-dest', hasValidDest() ? destText : 'Not selected');
             setTxt('review-val-bin', keepBin ? 'Keep originals' : 'Remove after ISO');
             setTxt('review-val-naming', enableRename ? (renameId ? 'Title [GameID]' : 'Title only') : 'Keep original names');
-            setTxt('review-val-storage', `${compChoice === 'opl' ? 'Compress .ZSO' : 'Keep .ISO'}${splitFat32 ? ' + FAT32 Split' : ''}`);
-            setTxt('review-val-extras', (autoArt && autoCfg) ? 'Art + CFG' : (autoArt ? 'Artwork only' : (autoCfg ? 'CFG only' : 'None')));
+            setTxt('review-val-storage', destMode === 'pfs'
+                ? 'Raw .ISO (HDL Partition)'
+                : `${compChoice === 'opl' ? 'Compress .ZSO' : 'Keep .ISO'}${splitFat32 ? ' + FAT32 Split' : ''}`);
+            setTxt('review-val-extras', (autoArt && autoCfg) ? (destMode === 'pfs' ? '+OPL Art + CFG' : 'Art + CFG') : (autoArt ? 'Artwork only' : (autoCfg ? 'CFG only' : 'None')));
         }
 
         function updateWizardUI() {
@@ -3043,7 +4091,11 @@
                 if (cb.checked) {
                     const f = currentFiles[cb.dataset.idx];
                     if (f && f.size_bytes) {
-                        queuedBytes += (compChoice === 'opl') ? Math.round(f.size_bytes * 0.72) : f.size_bytes;
+                        if (destMode === 'pfs') {
+                            queuedBytes += (f.ext === '.zso') ? Math.round(f.size_bytes * 1.35) : f.size_bytes;
+                        } else {
+                            queuedBytes += (compChoice === 'opl') ? Math.round(f.size_bytes * 0.72) : f.size_bytes;
+                        }
                     }
                 }
             });
@@ -3188,10 +4240,10 @@
             const badgeEl = document.getElementById('autopilot-ready-badge');
             if (!summaryEl || !badgeEl) return;
 
-            const srcPath = document.getElementById('source-path-display')?.textContent || '';
-            const destPath = document.getElementById('dest-path-display')?.textContent || '';
-            const hasSource = srcPath && srcPath !== 'No Folder Selected' && !srcPath.startsWith('Waiting');
-            const hasDest = destPath && destPath !== 'No OPL Destination Selected' && !destPath.startsWith('Waiting');
+            const isPfs = (destMode === 'pfs');
+            const destPath = isPfs ? selectedPfsDevice : (document.getElementById('dest-path-display')?.textContent || '');
+            const hasSource = hasValidSource();
+            const hasDest = hasValidDest();
 
             const keepBin = document.getElementById('keep_bin')?.checked;
             const enableRename = document.getElementById('enable_rename')?.checked;
@@ -3204,18 +4256,24 @@
             const actions = [];
             actions.push(`convert any <code class="text-blue-300 font-mono">.BIN/.CHD</code> to <code class="text-blue-300 font-mono">.ISO</code> (${keepBin ? 'keeping' : 'removing'} originals)`);
             if (enableRename) {
-                actions.push(`rename games to <code class="text-purple-300 font-mono">${renameId ? 'Title [GameID]' : 'Title'}</code>`);
+                actions.push(`${isPfs ? 'name HDL partitions as' : 'rename games to'} <code class="text-purple-300 font-mono">${renameId ? 'Title [GameID]' : 'Title'}</code>`);
             }
-            if (compChoice === 'opl') {
-                actions.push(`compress ISOs into <code class="text-emerald-300 font-mono">.ZSO</code>`);
-            } else if (splitFat32) {
-                actions.push(`keep <code class="font-mono">.ISO</code> format (splitting <code class="font-mono">&gt;4GB</code> games into <code class="text-amber-300 font-mono">ul.cfg</code> if FAT32)`);
+            if (isPfs) {
+                actions.push(`inject raw <code class="text-cyan-300 font-mono">.ISO</code> HDL partitions directly onto <code class="text-cyan-300 font-mono">${selectedPfsDevice || 'PS2 HDD'}</code> via <code class="font-mono">hdl_dump</code>`);
+                if (autoArt) actions.push(`upload 6-piece OPL artwork into <code class="text-orange-300 font-mono">+OPL/ART</code>`);
+                if (autoCfg) actions.push(`upload game metadata into <code class="text-teal-300 font-mono">+OPL/CFG</code>`);
             } else {
-                actions.push(`keep uncompressed <code class="font-mono">.ISO</code> format`);
+                if (compChoice === 'opl') {
+                    actions.push(`compress ISOs into <code class="text-emerald-300 font-mono">.ZSO</code>`);
+                } else if (splitFat32) {
+                    actions.push(`keep <code class="font-mono">.ISO</code> format (splitting <code class="font-mono">&gt;4GB</code> games into <code class="text-amber-300 font-mono">ul.cfg</code> if FAT32)`);
+                } else {
+                    actions.push(`keep uncompressed <code class="font-mono">.ISO</code> format`);
+                }
+                actions.push(`transfer into <code class="text-cyan-300 font-mono">DVD/</code> &amp; <code class="text-cyan-300 font-mono">CD/</code>`);
+                if (autoArt) actions.push(`scrape 6-piece OPL artwork into <code class="text-orange-300 font-mono">ART/</code>`);
+                if (autoCfg) actions.push(`write game metadata to <code class="text-teal-300 font-mono">CFG/*.cfg</code>`);
             }
-            actions.push(`transfer into <code class="text-cyan-300 font-mono">DVD/</code> &amp; <code class="text-cyan-300 font-mono">CD/</code>`);
-            if (autoArt) actions.push(`scrape 6-piece OPL artwork into <code class="text-orange-300 font-mono">ART/</code>`);
-            if (autoCfg) actions.push(`write game metadata to <code class="text-teal-300 font-mono">CFG/*.cfg</code>`);
 
             let checkedCount = 0;
             document.querySelectorAll('.queue-checkbox').forEach(cb => { if (cb.checked) checkedCount++; });
@@ -3229,11 +4287,12 @@
             } else if (hasSource && !hasDest) {
                 badgeEl.textContent = 'Select Step 2 (Destination)';
                 badgeEl.className = 'shrink-0 font-mono text-[11px] font-bold px-3 py-1 rounded-full bg-blue-950/70 text-cyan-300 border border-cyan-500/40 self-start sm:self-center';
-                summaryEl.innerHTML = `${pipelineHtml} <span class="text-cyan-300 font-semibold block mt-1">👉 ${currentFiles.length} game(s) scanned! Now select your OPL Destination folder in Step 2 to enable execution.</span>`;
+                summaryEl.innerHTML = `${pipelineHtml} <span class="text-cyan-300 font-semibold block mt-1">👉 ${currentFiles.length} game(s) scanned! Now select your OPL Destination in Step 2 to enable execution.</span>`;
             } else if (hasSource && hasDest) {
                 badgeEl.textContent = `Ready (${checkedCount} Queued)`;
                 badgeEl.className = 'shrink-0 font-mono text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-950/70 text-emerald-300 border border-emerald-500/40 self-start sm:self-center';
-                summaryEl.innerHTML = `${pipelineHtml} <span class="text-emerald-300 font-semibold block mt-1">✅ ${checkedCount} of ${currentFiles.length} game(s) selected and ready to process into <code class="font-mono">${destPath}</code>.</span>`;
+                const destLabel = isPfs ? `APA/PFS PS2 HDD (${destPath})` : destPath;
+                summaryEl.innerHTML = `${pipelineHtml} <span class="text-emerald-300 font-semibold block mt-1">✅ ${checkedCount} of ${currentFiles.length} game(s) selected and ready to ${isPfs ? 'install to' : 'process into'} <code class="font-mono">${destLabel}</code>.</span>`;
             }
         }
 
@@ -3241,6 +4300,7 @@
             saveUserPrefs();
             updateAutoPilotSummary();
             if (currentFiles.length === 0) return;
+            const isPfs = (destMode === 'pfs');
             const enableRename = document.getElementById('enable_rename').checked;
             const renameId = document.getElementById('rename_id').checked;
             const compChoice = document.querySelector('input[name="comp_choice"]:checked').value;
@@ -3259,7 +4319,7 @@
                     finalName = file.filename.replace(/\.(bin|chd)$/i, '_converted.iso');
                     finalExt = '.iso';
                 }
-                let willCompress = (isIso && compChoice === 'opl');
+                let willCompress = (!isPfs && isIso && compChoice === 'opl');
                 if (willCompress) { finalExt = '.zso'; }
                 if (enableRename && file.clean_id && file.clean_title) {
                     let displayId = file.raw_id.replace('_', '-');
@@ -3298,19 +4358,31 @@
                     }
                 }
                 if (compCell) {
-                    compCell.innerHTML = willCompress ? `<span class="text-emerald-400">ZSO</span>` : `<span class="text-gray-600">-</span>`;
+                    if (isPfs) {
+                        compCell.innerHTML = (file.ext === '.zso')
+                            ? `<span class="text-amber-300 text-xs" title="ZSO will be automatically decompressed to raw ISO for APA/PFS HDD injection">ZSO→ISO</span>`
+                            : `<span class="text-cyan-400 text-xs" title="Raw ISO injected as APA HDL partition">HDL ISO</span>`;
+                    } else {
+                        compCell.innerHTML = willCompress ? `<span class="text-emerald-400">ZSO</span>` : `<span class="text-gray-600">-</span>`;
+                    }
                 }
 
-                let isExisting = existingDestFiles.includes(finalName.toLowerCase());
+                let isExisting = isPfs
+                    ? Boolean((file.clean_id && pfsInstalledIds.includes(file.clean_id)) || (file.raw_id && pfsInstalledIds.includes(file.raw_id)))
+                    : existingDestFiles.includes(finalName.toLowerCase());
+                let conflictKey = isPfs ? (`pfs:${selectedPfsDevice}:${file.clean_id || file.filename}`) : finalName;
                 let warningSpan = row.querySelector('.col-warning');
                 let checkbox = row.querySelector('.queue-checkbox');
 
                 if (isExisting) {
-                    warningSpan.innerHTML = `<span class="text-red-500 cursor-help font-bold text-lg leading-none" title="File already exists in destination!">❗</span>`;
-                    if (row.dataset.conflictName !== finalName) { checkbox.checked = false; row.dataset.conflictName = finalName; }
+                    const warnTitle = isPfs
+                        ? `Game (${file.raw_id}) is already installed on ${selectedPfsDevice}!`
+                        : "File already exists in destination!";
+                    warningSpan.innerHTML = `<span class="text-red-500 cursor-help font-bold text-lg leading-none" title="${warnTitle}">❗</span>`;
+                    if (row.dataset.conflictName !== conflictKey) { checkbox.checked = false; row.dataset.conflictName = conflictKey; }
                 } else {
                     warningSpan.innerHTML = ``;
-                    if (row.dataset.conflictName && row.dataset.conflictName !== finalName) { checkbox.checked = true; row.dataset.conflictName = ""; }
+                    if (row.dataset.conflictName && row.dataset.conflictName !== conflictKey) { checkbox.checked = true; row.dataset.conflictName = ""; }
                 }
             });
 
@@ -3322,6 +4394,7 @@
             const row = document.querySelector(`tr[data-idx="${idx}"]`);
             const checkbox = row.querySelector('.queue-checkbox');
             const file = currentFiles[idx];
+            const isPfs = (destMode === 'pfs');
             const enableRename = document.getElementById('enable_rename').checked;
             const renameId = document.getElementById('rename_id').checked;
             const compChoice = document.querySelector('input[name="comp_choice"]:checked').value;
@@ -3345,7 +4418,10 @@
                 finalName = file.filename.replace(/\.(bin|chd)$/i, '_converted.iso');
                 finalExt = '.iso';
             }
-            if (isIso && compChoice === 'opl') { finalExt = '.zso'; }
+            if (isPfs && file.ext === '.zso') {
+                steps.push(`automatically decompressed from .ZSO to a temporary .ISO for APA/PFS injection`);
+            }
+            if (!isPfs && isIso && compChoice === 'opl') { finalExt = '.zso'; }
 
             if (enableRename && file.clean_id && file.clean_title) {
                 let displayId = file.raw_id.replace('_', '-');
@@ -3356,19 +4432,33 @@
                 } else {
                     steps.push(`kept as '${newName}' (already matches standard name)`);
                 }
-            } else if (isIso && compChoice === 'opl' && finalName.toLowerCase().endsWith('.iso')) {
+            } else if (!isPfs && isIso && compChoice === 'opl' && finalName.toLowerCase().endsWith('.iso')) {
                 finalName = finalName.replace(/\.iso$/i, '.zso');
             }
 
-            if (isIso && compChoice === 'opl') steps.push("compressed to ZSO");
+            if (!isPfs && isIso && compChoice === 'opl') steps.push("compressed to ZSO");
 
-            let isExisting = existingDestFiles.includes(finalName.toLowerCase());
+            let isExisting = isPfs
+                ? Boolean((file.clean_id && pfsInstalledIds.includes(file.clean_id)) || (file.raw_id && pfsInstalledIds.includes(file.raw_id)))
+                : existingDestFiles.includes(finalName.toLowerCase());
             let planStr = "";
 
             if (!checkbox.checked) {
                 planStr = isExisting
-                    ? "Item is unchecked and will be skipped because it already exists in the destination folder."
+                    ? (isPfs ? `Item is unchecked and will be skipped because ${file.raw_id} is already installed on ${selectedPfsDevice}.` : "Item is unchecked and will be skipped because it already exists in the destination folder.")
                     : "Item is currently unchecked and will be skipped.";
+            } else if (isPfs) {
+                let mediaType = (file.size.includes('MB') && parseFloat(file.size) < 700) ? "CD" : "DVD";
+                let pushTxt = isExisting
+                    ? `skipped because ${file.raw_id} is already installed on ${selectedPfsDevice}`
+                    : `injected to ${selectedPfsDevice} as a ${mediaType} HDL partition via hdl_dump`;
+                if (!isExisting && autoArt && file.raw_id !== "Unknown") pushTxt += pfsHasOplPartition ? ", have its artwork uploaded to +OPL/ART" : " (artwork skipped: no +OPL partition)";
+                if (!isExisting && autoCfg && file.raw_id !== "Unknown") pushTxt += pfsHasOplPartition ? ", and have its CFG metadata uploaded to +OPL/CFG" : "";
+                steps.push(pushTxt);
+
+                if (steps.length === 1) planStr = `File will be ${steps[0]}.`;
+                else if (steps.length === 2) planStr = `File will be ${steps[0]} and ${steps[1]}.`;
+                else planStr = `File will be ${steps.slice(0, -1).join(', ')}, and ${steps[steps.length - 1]}.`;
             } else {
                 let subfolder = (file.size.includes('MB') && parseFloat(file.size) < 700) ? "CD" : "DVD";
                 const isDestFat32 = destDriveInfo && (destDriveInfo.filesystem || '').toUpperCase() === 'FAT32';
@@ -3417,6 +4507,8 @@
             document.getElementById('run-btn').disabled = locked;
             document.getElementById('btn-source').disabled = locked;
             document.getElementById('btn-dest').disabled = locked;
+            const scanPfsBtn = document.getElementById('btn-scan-pfs');
+            if (scanPfsBtn) scanPfsBtn.disabled = locked;
             const reviewBackBtn = document.getElementById('wizard-review-back-btn');
             if (reviewBackBtn) reviewBackBtn.disabled = locked;
             document.querySelectorAll('#wizard-review-grid button').forEach(b => { b.disabled = locked; });
@@ -3429,13 +4521,16 @@
             const terminalLog = document.getElementById('terminal-log');
 
             const srcPath = document.getElementById('source-path-display').textContent;
-            const destPath = document.getElementById('dest-path-display').textContent;
-            if (!srcPath || srcPath === 'No Folder Selected' || srcPath.startsWith('Waiting')) {
+            const targetDest = (destMode === 'pfs') ? selectedPfsDevice : document.getElementById('dest-path-display').textContent;
+            if (!hasValidSource()) {
                 showAppNotice("Please select a Source Directory in Step 1 first so Auto Pilot can scan your games.", "Step 1: Source Folder Required", "warning");
                 return;
             }
-            if (!destPath || destPath === 'No OPL Destination Selected' || destPath.startsWith('Waiting')) {
-                showAppNotice("Please select an OPL Destination folder or USB drive in Step 2 before engaging Auto Pilot.", "Step 2: OPL Destination Required", "warning");
+            if (!hasValidDest()) {
+                showAppNotice(destMode === 'pfs'
+                    ? "Please scan and select a PlayStation 2 APA/PFS drive in Step 2 before engaging Auto Pilot."
+                    : "Please select an OPL Destination folder or USB drive in Step 2 before engaging Auto Pilot.",
+                    "Step 2: OPL Destination Required", "warning");
                 return;
             }
             
@@ -3455,16 +4550,17 @@
             setTimeout(() => { terminalContainer.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
 
             const config = {
-                source: document.getElementById('source-path-display').textContent,
-                target: document.getElementById('dest-path-display').textContent,
+                source: srcPath,
+                target: targetDest,
+                dest_mode: destMode,
                 files: selectedFiles,
                 keep_bin: document.getElementById('keep_bin').checked,
                 enable_rename: document.getElementById('enable_rename').checked,
                 rename_id: document.getElementById('rename_id').checked,
-                comp_choice: document.querySelector('input[name="comp_choice"]:checked').value,
+                comp_choice: (destMode === 'pfs') ? 'skip' : document.querySelector('input[name="comp_choice"]:checked').value,
                 auto_art: document.getElementById('auto_art').checked,
                 auto_cfg: document.getElementById('auto_cfg')?.checked ?? true,
-                split_fat32: document.getElementById('split_fat32')?.checked ?? true
+                split_fat32: (destMode === 'pfs') ? false : (document.getElementById('split_fat32')?.checked ?? true)
             };
 
             try {
@@ -3501,11 +4597,14 @@
                                 const line = document.createElement('div');
                                 line.className = "mb-1";
                                 if (msg.includes("[ERROR]")) line.classList.add("text-red-400", "font-bold");
+                                else if (msg.includes("[WARN]")) line.classList.add("text-amber-400", "font-bold");
                                 else if (msg.includes("===")) line.classList.add("text-blue-400", "font-bold", "mt-2");
                                 else if (msg.includes("---")) line.classList.add("text-purple-400", "mt-2");
                                 else if (msg.includes("[BCHUNK]") || msg.includes("[ZISO]") || msg.includes("[CHDMAN]")) line.classList.add("text-gray-400", "opacity-75", "pl-4");
+                                else if (msg.includes("[PFSSHELL]") || msg.includes("[HDL_DUMP]")) line.classList.add("text-cyan-300");
+                                else if (msg.includes("[HDL_DUMP]") || msg.includes("[PFSSHELL]")) line.classList.add("text-cyan-300");
                                 else if (msg.includes("[CUE]")) line.classList.add("text-cyan-400", "font-bold");
-                                else if (msg.includes("Success") || msg.includes("Cleaned up") || msg.includes("Renamed") || msg.includes("Pushed") || msg.includes("Downloaded") || msg.includes("Skipped") || msg.includes("💾") || msg.includes("[CFG]")) line.classList.add("text-emerald-400");
+                                else if (msg.includes("[SUCCESS]") || msg.includes("Success") || msg.includes("Cleaned up") || msg.includes("Renamed") || msg.includes("Pushed") || msg.includes("Downloaded") || msg.includes("Skipped") || msg.includes("💾") || msg.includes("[CFG]")) line.classList.add("text-emerald-400");
                                 else if (msg.includes("aborted")) line.classList.add("text-yellow-400", "font-bold");
                                 else line.classList.add("text-gray-300");
 
@@ -3578,7 +4677,7 @@
                         btn.title = `Load ${prefs.recent_source}`;
                     }
                 }
-                if (prefs.recent_dest) {
+                if (prefs.recent_dest && destMode !== 'pfs') {
                     const btn = document.getElementById('recent-dest-btn');
                     if (btn) {
                         btn.classList.remove('hidden');

@@ -8,7 +8,9 @@ a = Analysis(
     binaries=[
         ('bchunk.exe', '.'),
         ('ziso.exe', '.'),
-        ('chdman.exe', '.')
+        ('chdman.exe', '.'),
+        ('hdl_dump.exe', '.'),
+        ('pfsshell.exe', '.'),
     ],
     datas=[
         ('templates', 'templates'),

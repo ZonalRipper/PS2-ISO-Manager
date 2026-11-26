@@ -150,6 +150,8 @@ dist/PS2-ISO-Manager.exe
 ## 🙏 Credits & Attributions
 
 - **[Open PS2 Loader (OPL)](https://github.com/ps2homebrew/Open-PS2-Loader)** — The open-source PlayStation 2 game loader platform.
+- **[hdl_dump (`ps2homebrew/hdl-dump`)](https://github.com/ps2homebrew/hdl-dump)** — Created by The W1zard 0f 0z & revisited by AKuHAK; powers APA/HDL internal PS2 HDD game installation and management.
+- **[pfsshell (`ps2homebrew/pfsshell`)](https://github.com/ps2homebrew/pfsshell)** — Maintained by uyjulian (originally by Wizard of Oz, powered by `ps2sdk`); enables browsing and managing `+OPL` PFS partitions on Windows.
 - **[Luden02 OPL Art Database](https://github.com/Luden02/psx-ps2-opl-art-database)** & **[xlenore ps2-covers](https://github.com/xlenore/ps2-covers)** — Community PlayStation 2 cover, disc, logo, and backdrop repositories.
 - **ZSO Compression (`ziso`)** — LZ4-based compressed ISO format developed for OPL.
 - **`bchunk` & MAME `chdman`** — Optical disc track conversion and Compressed Hunks of Data extraction tools.
