@@ -1,57 +1,59 @@
-# 🎮 PS2 ISO Manager — Official Release v1.00
+# 🫧 PS2 ISO Manager — Release v2.0 (New GUI Layout)
 
-Welcome to **PS2 ISO Manager v1.00**, an all-in-one desktop suite for preparing, converting, compressing, naming, verifying, and customizing PlayStation 2 game libraries for **Open PS2 Loader (OPL)**.
-
-This release packages the entire application—including the offline 11,000+ PS2 title & metadata database (`PS2.data.json`), 3D WebGL Cover Art & Config Studio, and conversion binaries (`bchunk`, `ziso`, `chdman`)—into a single standalone Windows executable (`PS2-ISO-Manager.exe`).
+Welcome to **PS2 ISO Manager v2.0**! This landmark release introduces a ground-up **Liquid Glass GUI Layout**, a categorized sidebar organized by **drive format**, a brand-new **USB / exFAT / FAT32 / SMB Drive Browser**, smooth GPU-accelerated animations throughout, and full **Internal PS2 HDD (APA / PFS)** management—all bundled inside a single standalone Windows executable (`PS2-ISO-Manager.exe`).
 
 ---
 
-## ✨ Highlights in v1.00
+## ✨ What's New in v2.0
 
-### ⚡ 1-Click Auto Pilot Queue (5-Stage Automated Pipeline)
-Drop a folder of raw downloads or disc rips into **Step 1 (Source)** and select your OPL USB, exFAT/FAT32 drive, HDD, or SMB folder in **Step 2 (Destination)**:
-1. **Format Conversion (`BIN/CUE` & `CHD` → `ISO`)**: Automatically converts multi-track `.bin/.cue` and `.chd` disc images into standard PS2 `.iso` files.
-2. **Automatic Missing `.CUE` Recreation**: If a `.bin` file is missing its `.cue` sheet, the engine inspects the binary sector headers (`MODE2/2352`, `MODE1/2352`, `MODE1/2048`), recreates the `.cue` file automatically, and proceeds with conversion.
-3. **Internal Disc Sector Game ID Scan & Naming**: Reads `SYSTEM.CNF` directly from the disc image to detect the official Sony serial (`SLUS`, `SLES`, `SCUS`, `SCES`, `SLPS`, etc.) and renames messy files to their clean official title (`God of War [SCUS-97399].iso`).
-4. **ZSO Compression & Automatic `FAT32 >4GB` Splitting (`ul.cfg`)**:
-   - Compresses `.iso` files into OPL-compatible `.zso` format (saving **25%–40%** drive space) with live storage-saved statistics.
-   - Automatically detects `FAT32` destination drives and splits uncompressed ISOs over 4 GB into `1 GB` USBUtil chunks (`ul.<CRC>.<ID>.00`) with a valid 64-byte `ul.cfg` index.
-5. **Smart OPL Routing, 6-Piece Artwork & `CFG` Generation**:
-   - Builds the standard OPL directory structure (`DVD/`, `CD/`, `ART/`, `CFG/`) and routes `< 700 MB` games to `CD/` and `≥ 700 MB` games to `DVD/` using safe `.part` atomic transfers.
-   - Scrapes missing OPL artwork (`COV`, `COV2`, `LAB`, `ICO`, `LGO`, `BG`, `SCR`) into `ART/`.
-   - Generates per-game `CFG/<GameID>.cfg` metadata files (`Title`, `Publisher`, `Developer`, `Genre`, `Release Date`) for OPL's Game Info page.
+### 🫧 New Liquid Glass GUI Layout (Now Default)
+- **Modern Translucent Glass Aesthetic:** Multi-layered frosted glass surfaces with specular rim highlights, drifting ambient light orbs, and a one-click **Dark Glass / Light Frost** theme switcher in the sidebar footer.
+- **Categorized Left Sidebar by Workflow & Drive Format:** Clearly separated frosted glass category cards with color-coded header bars and format badges so you always know which tool targets which drive type:
+  - **Guided Setup (`WIZARD`):** 7-Step Auto Pilot Wizard for all drive formats.
+  - **USB / exFAT / SMB (`FOLDER`):** USB / SMB Browser, OPL Art Scraper, OPL CFG Generator, OPL Drive Cleaner, and 3D Cover Gallery.
+  - **Internal PS2 HDD (`APA / PFS`):** PFS Drive Browser, PFS Art Scraper, PFS CFG Generator, PFS Drive Cleaner, and PFS 3D Gallery.
+  - **Local Disc Tools (`PC FILES`):** Standardize Names, Convert BIN / CHD, Compress to `.ZSO`, Decompress `.ZSO`, and Verify & Hash Check.
+- **Smooth, Fluid Animations:** Tactile sidebar hover & active glow indicators, glossy sheen button highlights, smooth view & tool transitions, directional forward/backward wizard step slides, browser tab reveals, and spring-animated modals & Lightbox previews (respecting `prefers-reduced-motion`).
+- **Dynamic Window-Responsive Design:** Scales seamlessly from compact split-screen windows (`700×540` minimum) up to maximized 1080p/1440p/4K displays, with a collapsible mobile/narrow sidebar drawer and `ResizeObserver`-backed 3D WebGL viewport.
 
 ---
 
-### 🛠️ 8-Tool Manual Toolkit
-Need granular control over a single file or an existing OPL drive? Switch to the **Manual Toolkit** tab for 8 dedicated utilities with per-tool state memory, live search, status filtering, and row checkboxes:
-- **🏷️ Standardize Name**: Batch-rename `.iso`, `.zso`, and `.chd` files using internal disc Game IDs.
-- **💿 Convert BIN / CHD**: Convert `.bin`/`.cue` (with automatic missing `.cue` regeneration) and `.chd` dumps into `.iso`.
-- **🗜️ Compress to ZSO**: Compress `.iso` games into `.zso` with exact storage savings summaries.
-- **📦 Decompress ZSO**: Restore `.zso` archives back into uncompressed `.iso` images.
-- **🖼️ OPL Art Scraper**: Audit existing drive artwork (`Full Set`, `Partial`, `Missing`) and scrape missing assets.
-- **📝 OPL CFG Generator**: Batch-create or update `CFG/*.cfg` metadata files across your entire OPL drive while preserving custom compatibility modes.
-- **🛡️ Verify & Hash Check**: Validate ISO9660 `CD001` volume descriptors, sector alignment, `.ZSO` headers, and `.CHD` headers, and compute `CRC32` & `MD5` checksums.
-- **🧹 OPL Drive Cleaner**: Find and clean up orphaned artwork in `ART/`, duplicate games across `CD/` & `DVD/`, and leftover `.part` temp files.
+### 💾 New USB / exFAT / FAT32 / SMB Drive Browser
+Full interactive drive & file management for folder-based OPL setups, mirroring the Internal PS2 HDD browser:
+- **Auto-Detected Drives & Direct SMB UNC Support:** Scans connected removable USB drives, mapped network shares, and local drives with filesystem type (`exFAT`, `FAT32`, `NTFS`, `SMB`), free space HUD, and `★ OPL` indicators—plus a folder picker and direct path bar for UNC network shares (e.g. `\\192.168.1.50\PS2SMB`).
+- **🎮 Games on Drive Tab:** Lists all games across `DVD/`, `CD/`, and FAT32 `ul.cfg` split games with Game ID, media/format badges, `✓ ART` & `✓ CFG` status pills, plus one-click **`⚙️ CFG`** editing, **`✏️ Rename`**, and **`🗑️ Delete`**.
+- **📂 File Explorer Tab:** Full directory navigation with clickable breadcrumbs, OPL quick-jump pills (`Root`, `DVD`, `CD`, `ART`, `CFG`, `VMC`, `CHT`, `THM`, `APPS`), folder creation, file upload/download, image Lightbox preview, direct `.cfg` editing, rename, and delete.
+- **🗂️ OPL Folders Tab & One-Click Setup:** Inspect item counts and sizes for every standard OPL directory and create any missing OPL folders in one click.
+- **Quick Tool Integration:** Jump directly into **Scrape Art**, **Generate CFGs**, **Clean Orphans**, or the **3D Cover Gallery** pre-loaded with the active USB/SMB drive.
 
 ---
 
-### 🎨 Interactive 3D WebGL Art Gallery & OPL Config Studio
-- **360° 3D PS2 Amaray Cobalt-Blue Case & Spinning Disc**: Preview your OPL library's front cover (`COV`), back cover (`COV2`), spine label (`LAB`), spinning disc icon (`ICO`), logo (`LGO`), and backdrop (`BG`) in real time.
-- **Drag-and-Drop Custom Art Uploader (Auto-Resizes)**: Drop any PNG/JPG/WebP image onto the 3D viewport or click any art slot button—images are automatically scaled to OPL's exact pixel specifications (`140×200`, `242×344`, `18×240`, `64×64`, `300×125`, `640×480`) and saved to `ART/`.
-- **Per-Game OPL `CFG` Editor with Interactive Mode & VMC Guides**:
-  - Edit game metadata (`Title`, `Developer`, `Publisher`, `Release Date`, `Genre`, `Description`).
-  - Toggle **OPL Compatibility Modes 1–6** (`Accurate Reads`, `Sync DMA`, `Unhook Syscalls`, `Skip Videos (PSS)`, `Emulate DVD-DL`, `Disable IGR`) with built-in hover helpers explaining what symptoms each mode fixes and which games need them.
-  - Configure **Virtual Memory Card Slot 1 (`$VMC_0`)** with one-click presets for **Shared (`generic_0`)**, **Per-Game (`<GameID>_0`)**, or **Physical Memory Card**.
+### 💽 Internal PS2 HDD (APA / PFS) Support & PFS Drive Browser
+Manage classic APA/PFS-formatted PlayStation 2 internal hard drives directly over SATA or a USB-to-SATA adapter:
+- **Built-in UAC Admin Elevation:** Live sidebar privilege status pill with one-click **Restart as Administrator**.
+- **Auto Pilot APA / PFS Injection Pipeline:** Automatically skips `.ZSO` compression / FAT32 splitting, decompresses `.ZSO` sources as needed, skips already-installed Game IDs, injects CD/DVD games via `hdl_dump` (without leaving `info.sys` files behind), and batch-uploads `ART/` & `CFG/` into `+OPL` via `pfsshell`.
+- **Inline PFS Drive Browser:** Search, rename, delete, and edit CFGs for installed HDL games; browse/upload/download/preview files inside `+OPL` and other PFS partitions; inspect APA partitions; and create a 256 MB `+OPL` partition in one click.
+- **Full Toolkit & 3D Gallery Parity:** Dedicated PFS Art Scraper, PFS CFG Generator, PFS Drive Cleaner, and PFS 3D Cover Gallery with live `+OPL/ART` sync and custom art upload.
 
 ---
 
-### 🕹️ Authentic PlayStation 2 / Retro OPL Interface
-- **PS2 BIOS "Seven Towers & Ocean Nebula" Theme**: Inspired by the original PlayStation 2 System Configuration screen and fat PS2 hardware shell grooves.
-- **DualShock 2 Button Prompts (`△ ○ × □`) & Toggleable CRT Scanlines**: Includes a header toggle (`📺 CRT: ON/OFF`) and automatic persistence of your recent folders and checkbox preferences.
+### ⚙️ Polished OPL Config Studio & Guided Wizard
+- **Silky-Smooth Compatibility Mode & VMC Hover Guides:** Eliminated layout-shift jitter when hovering Compatibility Modes 1–6 or Virtual Memory Card (`$VMC_0`) options with a fixed-height guide panel, debounced hover transitions, and keyboard focus support.
+- **7-Step Guided Auto Pilot Wizard:** Clear step-by-step configuration with saved preferences, live filename previews, clickable review summary tiles, and a **`⚡ Skip to Review`** shortcut.
+- **Codebase Cleanup:** Promoted Liquid Glass as the single unified UI (`templates/index.html`) and removed legacy template code, temporary preview routes/flags, and unused imports.
 
 ---
 
 ## 📦 Installation & Usage (Standalone Windows `.exe`)
 1. Download **`PS2-ISO-Manager.exe`** from the Assets section below.
 2. Double-click `PS2-ISO-Manager.exe` to launch—no Python installation or external dependencies required.
+3. *(For APA / PFS internal PS2 hard drives)* Run as Administrator—or click the **Standard User → Elevate** pill in the sidebar footer.
+
+---
+
+## 🙏 Credits & Attributions
+- **Open PS2 Loader (OPL)** — Open-source PlayStation 2 game loader.
+- **hdl_dump (`ps2homebrew/hdl-dump` — The W1zard 0f 0z & AKuHAK)** — APA/HDL internal PS2 HDD installer & TOC utility.
+- **pfsshell (`ps2homebrew/pfsshell` — uyjulian, Wizard of Oz & `ps2sdk`)** — PFS partition shell and APA/PFS/iomanX libraries.
+- **Luden02 OPL Art Database** & **xlenore ps2-covers** — Community PlayStation 2 artwork repositories.
+- **`ziso`, `bchunk`, MAME `chdman`, & Three.js** — Disc compression, conversion, extraction, and 3D case rendering.

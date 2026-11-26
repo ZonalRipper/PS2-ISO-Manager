@@ -41,7 +41,6 @@ from ps2_utility.core import (
 from ps2_utility.pfs import (
     is_admin,
     is_pfs_target,
-    hdd_to_physical_drive,
     sanitize_hdl_title,
     sanitize_pfs_token,
     query_ps2_hdd_drives,
@@ -487,6 +486,41 @@ class PfsDeleteGameRequest(BaseModel):
     device: str
     partition_name: str
 
+class UsbInspectRequest(BaseModel):
+    root_path: str
+
+class UsbLsRequest(BaseModel):
+    root_path: str
+    rel_path: str = ""
+
+class UsbMkdirRequest(BaseModel):
+    root_path: str
+    rel_path: str = ""
+    folder_name: str
+
+class UsbRenameRequest(BaseModel):
+    root_path: str
+    rel_path: str = ""
+    old_name: str
+    new_name: str
+
+class UsbRmRequest(BaseModel):
+    root_path: str
+    rel_path: str = ""
+    name: str
+    ul_game_id: str = ""
+
+class UsbUploadRequest(BaseModel):
+    root_path: str
+    rel_path: str = ""
+    filename: str
+    data_b64: str
+
+class UsbFileRequest(BaseModel):
+    root_path: str
+    rel_path: str = ""
+    filename: str
+
 class ToolkitRequest(BaseModel):
     target_path: str
     action: str
@@ -859,6 +893,468 @@ def api_pfs_delete_game(req: PfsDeleteGameRequest):
         return {"status": "ok" if ok else "error", "error": "" if ok else out}
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
+
+# --- USB / exFAT / FAT32 / SMB File Browser Endpoints ---
+USB_OPL_FOLDERS = ["DVD", "CD", "ART", "CFG", "VMC", "CHT", "THM", "APPS", "POPS"]
+USB_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif"}
+USB_GAME_EXTS = {".iso", ".zso", ".chd", ".bin"}
+
+
+def _resolve_usb_safe_path(root_path: str, rel_path: str = "") -> tuple:
+    """Resolve root_path + rel_path safely without allowing traversal outside root_path."""
+    if not root_path or not root_path.strip():
+        raise ValueError("No folder or drive path specified.")
+    raw_root = root_path.strip()
+    if is_pfs_target(raw_root):
+        raise ValueError("Use the PFS Drive Browser for APA/PFS raw HDD targets.")
+    root_abs = os.path.abspath(raw_root)
+    if not os.path.isdir(root_abs):
+        raise ValueError(f"Path not found or unreachable: {raw_root}")
+
+    clean_rel = (rel_path or "").replace("\\", "/").strip("/")
+    parts = [p for p in clean_rel.split("/") if p and p != "."]
+    if any(p == ".." for p in parts):
+        raise ValueError("Invalid relative path.")
+
+    target = os.path.abspath(os.path.join(root_abs, *parts)) if parts else root_abs
+    # Guard against path traversal outside root_abs
+    try:
+        common = os.path.commonpath([os.path.normcase(root_abs), os.path.normcase(target)])
+    except ValueError:
+        raise ValueError("Path escapes selected drive root.")
+    if common != os.path.normcase(root_abs):
+        raise ValueError("Path escapes selected drive root.")
+    return root_abs, target, parts
+
+
+def _read_ul_cfg_entries(opl_root: str) -> list:
+    """Parse 64-byte USBUtil ul.cfg entries with title, raw_id, parts count, and total size."""
+    ul_cfg_path = os.path.join(opl_root, "ul.cfg")
+    if not os.path.isfile(ul_cfg_path):
+        return []
+    entries = []
+    try:
+        with open(ul_cfg_path, "rb") as f:
+            data = f.read()
+        for offset in range(0, len(data), 64):
+            rec = data[offset:offset + 64]
+            if len(rec) < 64:
+                continue
+            title = rec[0:32].split(b"\x00", 1)[0].decode("ascii", errors="ignore").strip()
+            raw_field = rec[32:47].split(b"\x00", 1)[0].decode("ascii", errors="ignore").strip()
+            if not raw_field.upper().startswith("UL."):
+                continue
+            raw_id = raw_field[3:].upper()
+            parts_cnt = rec[47]
+            media_byte = rec[48]
+            media = "CD" if media_byte == 0x12 else "DVD"
+            # Sum size of matching ul.*.<raw_id>.* chunk files on root
+            total_sz = 0
+            part_files = []
+            try:
+                for fn in os.listdir(opl_root):
+                    low = fn.lower()
+                    if low.startswith("ul.") and f".{raw_id.lower()}." in low:
+                        fp = os.path.join(opl_root, fn)
+                        if os.path.isfile(fp):
+                            total_sz += os.path.getsize(fp)
+                            part_files.append(fn)
+            except OSError:
+                pass
+            entries.append({
+                "title": title or raw_id,
+                "raw_id": raw_id,
+                "parts": parts_cnt,
+                "media": media,
+                "size_bytes": total_sz,
+                "part_files": part_files,
+            })
+    except Exception:
+        pass
+    return entries
+
+
+def _delete_ul_cfg_game(opl_root: str, raw_id: str) -> tuple:
+    """Remove a USBUtil split game from ul.cfg and delete its ul.<CRC>.<ID>.* part files."""
+    rid = (raw_id or "").strip().upper()
+    if not rid:
+        return False, "Missing ul.cfg Game ID."
+    ul_cfg_path = os.path.join(opl_root, "ul.cfg")
+    if os.path.isfile(ul_cfg_path):
+        with open(ul_cfg_path, "rb") as f:
+            data = f.read()
+        kept = []
+        for offset in range(0, len(data), 64):
+            rec = data[offset:offset + 64]
+            if len(rec) == 64:
+                raw_field = rec[32:47].split(b"\x00", 1)[0].decode("ascii", errors="ignore").strip().upper()
+                if raw_field != f"UL.{rid}":
+                    kept.append(rec)
+        if kept:
+            with open(ul_cfg_path, "wb") as f:
+                for rec in kept:
+                    f.write(rec)
+        else:
+            remove_quietly(ul_cfg_path)
+    for fn in os.listdir(opl_root):
+        if fn.lower().startswith("ul.") and f".{rid.lower()}." in fn.lower():
+            fp = os.path.join(opl_root, fn)
+            if os.path.isfile(fp):
+                os.remove(fp)
+    return True, ""
+
+
+def _list_windows_drives() -> list:
+    """Enumerate mounted Windows drives (USB/Removable, Network/SMB, External/Fixed) with OPL detection."""
+    drives = []
+    if os.name != "nt":
+        return drives
+    try:
+        bitmask = ctypes.windll.kernel32.GetLogicalDrives()
+        type_names = {
+            2: ("USB / Removable", "removable"),
+            3: ("Local / External", "fixed"),
+            4: ("Network / SMB", "network"),
+        }
+        for i in range(26):
+            if not (bitmask & (1 << i)):
+                continue
+            letter = f"{chr(65 + i)}:\\"
+            dtype = ctypes.windll.kernel32.GetDriveTypeW(ctypes.c_wchar_p(letter))
+            if dtype not in type_names:
+                continue
+            # Skip unready removable drives cleanly
+            try:
+                usage = shutil.disk_usage(letter)
+            except OSError:
+                continue
+            fs_buf = ctypes.create_unicode_buffer(64)
+            vol_buf = ctypes.create_unicode_buffer(261)
+            fs_type = "SMB" if dtype == 4 else "UNKNOWN"
+            label = ""
+            try:
+                ok = ctypes.windll.kernel32.GetVolumeInformationW(
+                    ctypes.c_wchar_p(letter), vol_buf, ctypes.sizeof(vol_buf),
+                    None, None, None, fs_buf, ctypes.sizeof(fs_buf)
+                )
+                if ok:
+                    label = vol_buf.value.strip()
+                    if fs_buf.value:
+                        fs_type = fs_buf.value.upper()
+            except Exception:
+                pass
+            has_opl = any(os.path.exists(os.path.join(letter, sub)) for sub in ("DVD", "CD", "ART", "CFG", "ul.cfg"))
+            type_label, kind = type_names[dtype]
+            used_pct = round((usage.used / usage.total) * 100, 1) if usage.total > 0 else 0.0
+            drives.append({
+                "path": letter,
+                "label": label or type_label,
+                "kind": kind,
+                "type_label": type_label,
+                "fs_type": fs_type,
+                "total_fmt": format_size(usage.total),
+                "free_fmt": format_size(usage.free),
+                "used_pct": used_pct,
+                "has_opl": has_opl,
+            })
+        # Prioritize OPL-ready drives, then removable USB & network SMB, then local drives
+        order = {"removable": 0, "network": 1, "fixed": 2}
+        drives.sort(key=lambda d: (0 if d["has_opl"] else 1, order.get(d["kind"], 9), d["path"]))
+    except Exception:
+        pass
+    return drives
+
+
+@app.get("/api/usb/drives")
+def api_usb_drives():
+    return {"drives": _list_windows_drives()}
+
+
+@app.post("/api/usb/inspect")
+def api_usb_inspect(req: UsbInspectRequest):
+    try:
+        root_abs, _, _ = _resolve_usb_safe_path(req.root_path, "")
+        dinfo = get_drive_info(root_abs)
+        is_unc = root_abs.startswith("\\\\")
+        if is_unc and dinfo["fs_type"] in ("UNKNOWN", ""):
+            dinfo["fs_type"] = "SMB"
+        elif is_unc and "SMB" not in dinfo["fs_type"]:
+            dinfo["fs_type"] = f"SMB ({dinfo['fs_type']})"
+
+        # Inspect OPL folder structure
+        folders = []
+        art_dir = os.path.join(root_abs, "ART")
+        cfg_dir = os.path.join(root_abs, "CFG")
+        art_names = set()
+        if os.path.isdir(art_dir):
+            try:
+                art_names = {f.upper() for f in os.listdir(art_dir)}
+            except OSError:
+                pass
+        cfg_names = set()
+        if os.path.isdir(cfg_dir):
+            try:
+                cfg_names = {f.upper() for f in os.listdir(cfg_dir)}
+            except OSError:
+                pass
+
+        for sub in USB_OPL_FOLDERS:
+            sp = os.path.join(root_abs, sub)
+            exists = os.path.isdir(sp)
+            cnt = 0
+            sz = 0
+            if exists:
+                try:
+                    for entry in os.scandir(sp):
+                        if entry.is_file():
+                            cnt += 1
+                            try:
+                                sz += entry.stat().st_size
+                            except OSError:
+                                pass
+                        elif entry.is_dir():
+                            cnt += 1
+                except OSError:
+                    pass
+            folders.append({
+                "name": sub,
+                "exists": exists,
+                "count": cnt,
+                "size_bytes": sz,
+                "size_fmt": format_size(sz),
+            })
+
+        # Scan games from DVD/, CD/, and ul.cfg
+        games = []
+        for media in ("DVD", "CD"):
+            mp = os.path.join(root_abs, media)
+            if not os.path.isdir(mp):
+                continue
+            try:
+                for entry in sorted(os.scandir(mp), key=lambda e: e.name.lower()):
+                    if not entry.is_file():
+                        continue
+                    ext = os.path.splitext(entry.name)[1].lower()
+                    if ext not in USB_GAME_EXTS:
+                        continue
+                    fpath = entry.path
+                    try:
+                        sz = entry.stat().st_size
+                    except OSError:
+                        sz = 0
+                    clean_id, raw_id = extract_game_id(fpath)
+                    rid = (raw_id or "").upper()
+                    clean_key = (clean_id or rid).replace("_", "").replace("-", "").replace(".", "").replace(" ", "").upper()
+                    db_title = game_db.get(clean_key, "") if clean_key else ""
+                    display_title = db_title or os.path.splitext(entry.name)[0]
+                    has_cov = bool(rid and (f"{rid}_COV.JPG" in art_names or f"{rid}_COV.PNG" in art_names))
+                    has_cfg = bool(rid and f"{rid}.CFG" in cfg_names)
+                    games.append({
+                        "title": display_title,
+                        "filename": entry.name,
+                        "rel_dir": media,
+                        "raw_id": rid or "UNKNOWN",
+                        "clean_id": clean_id or "",
+                        "media": media,
+                        "format": ext.replace(".", "").upper(),
+                        "size_bytes": sz,
+                        "size_fmt": format_size(sz),
+                        "has_art": has_cov,
+                        "has_cfg": has_cfg,
+                        "is_ul": False,
+                    })
+            except OSError:
+                pass
+
+        for u in _read_ul_cfg_entries(root_abs):
+            rid = u["raw_id"]
+            clean_id = rid.replace("_", "").replace("-", "").replace(".", "").replace(" ", "").upper()
+            db_title = game_db.get(clean_id, "")
+            has_cov = bool(f"{rid}_COV.JPG" in art_names or f"{rid}_COV.PNG" in art_names)
+            has_cfg = bool(f"{rid}.CFG" in cfg_names)
+            games.append({
+                "title": db_title or u["title"],
+                "filename": f"ul.cfg ({u['parts']} parts)",
+                "rel_dir": "",
+                "raw_id": rid,
+                "clean_id": clean_id,
+                "media": u["media"],
+                "format": "UL SPLIT",
+                "size_bytes": u["size_bytes"],
+                "size_fmt": format_size(u["size_bytes"]),
+                "has_art": has_cov,
+                "has_cfg": has_cfg,
+                "is_ul": True,
+            })
+
+        games.sort(key=lambda g: g["title"].lower())
+        opl_ready = any(f["exists"] and f["name"] in ("DVD", "CD", "ART", "CFG") for f in folders) or os.path.isfile(os.path.join(root_abs, "ul.cfg"))
+        missing_core = [name for name in ("DVD", "CD", "ART", "CFG", "VMC") if not os.path.isdir(os.path.join(root_abs, name))]
+
+        return {
+            "root_path": root_abs,
+            "drive_info": dinfo,
+            "opl_ready": opl_ready,
+            "missing_core_folders": missing_core,
+            "folders": folders,
+            "games": games,
+            "error": "",
+        }
+    except Exception as e:
+        return {"error": str(e), "games": [], "folders": []}
+
+
+@app.post("/api/usb/init-opl")
+def api_usb_init_opl(req: UsbInspectRequest):
+    try:
+        root_abs, _, _ = _resolve_usb_safe_path(req.root_path, "")
+        created = []
+        for sub in ("DVD", "CD", "ART", "CFG", "VMC", "CHT", "THM", "APPS"):
+            sp = os.path.join(root_abs, sub)
+            if not os.path.exists(sp):
+                os.makedirs(sp, exist_ok=True)
+                created.append(sub)
+        return {"status": "ok", "created": created}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/usb/ls")
+def api_usb_ls(req: UsbLsRequest):
+    try:
+        _, target_dir, segments = _resolve_usb_safe_path(req.root_path, req.rel_path)
+        if not os.path.isdir(target_dir):
+            return {"error": "Directory does not exist.", "entries": [], "path": "/" + "/".join(segments), "segments": segments}
+        entries = []
+        for entry in os.scandir(target_dir):
+            try:
+                st = entry.stat()
+                is_dir = entry.is_dir()
+                ext = "" if is_dir else os.path.splitext(entry.name)[1].lower()
+                mod = time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime))
+                entries.append({
+                    "name": entry.name,
+                    "is_dir": is_dir,
+                    "ext": ext,
+                    "size_bytes": 0 if is_dir else st.st_size,
+                    "size_fmt": "-" if is_dir else format_size(st.st_size),
+                    "modified": mod,
+                    "is_image": (not is_dir) and (ext in USB_IMAGE_EXTS),
+                    "is_game": (not is_dir) and (ext in USB_GAME_EXTS),
+                    "is_cfg": (not is_dir) and (ext == ".cfg"),
+                })
+            except OSError:
+                continue
+        entries.sort(key=lambda e: (0 if e["is_dir"] else 1, e["name"].lower()))
+        return {
+            "path": "/" + "/".join(segments) if segments else "/",
+            "segments": segments,
+            "entries": entries,
+            "error": "",
+        }
+    except Exception as e:
+        return {"error": str(e), "entries": [], "path": "/", "segments": []}
+
+
+@app.post("/api/usb/mkdir")
+def api_usb_mkdir(req: UsbMkdirRequest):
+    try:
+        _, parent_dir, _ = _resolve_usb_safe_path(req.root_path, req.rel_path)
+        clean_name = re.sub(r'[<>:"/\\|?*]', '', (req.folder_name or '').strip())
+        if not clean_name or clean_name in (".", ".."):
+            return {"status": "error", "error": "Invalid folder name."}
+        new_path = os.path.join(parent_dir, clean_name)
+        os.makedirs(new_path, exist_ok=True)
+        return {"status": "ok", "name": clean_name}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/usb/rename")
+def api_usb_rename(req: UsbRenameRequest):
+    try:
+        _, parent_dir, _ = _resolve_usb_safe_path(req.root_path, req.rel_path)
+        old_base = os.path.basename((req.old_name or "").strip())
+        new_base = re.sub(r'[<>:"/\\|?*]', '', (req.new_name or "").strip())
+        if not old_base or not new_base or new_base in (".", ".."):
+            return {"status": "error", "error": "Invalid filename."}
+        src = os.path.join(parent_dir, old_base)
+        dst = os.path.join(parent_dir, new_base)
+        if not os.path.exists(src):
+            return {"status": "error", "error": f"Item not found: {old_base}"}
+        if os.path.exists(dst) and os.path.normcase(src) != os.path.normcase(dst):
+            return {"status": "error", "error": f"An item named '{new_base}' already exists."}
+        os.rename(src, dst)
+        return {"status": "ok", "new_name": new_base}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/usb/rm")
+def api_usb_rm(req: UsbRmRequest):
+    try:
+        root_abs, parent_dir, _ = _resolve_usb_safe_path(req.root_path, req.rel_path)
+        if req.ul_game_id:
+            ok, err = _delete_ul_cfg_game(root_abs, req.ul_game_id)
+            return {"status": "ok" if ok else "error", "error": err}
+        base = os.path.basename((req.name or "").strip())
+        if not base or base in (".", ".."):
+            return {"status": "error", "error": "Invalid target name."}
+        target = os.path.join(parent_dir, base)
+        if not os.path.exists(target):
+            return {"status": "error", "error": f"Not found: {base}"}
+        if os.path.isdir(target):
+            shutil.rmtree(target)
+        else:
+            os.remove(target)
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/usb/upload")
+def api_usb_upload(req: UsbUploadRequest):
+    try:
+        _, target_dir, _ = _resolve_usb_safe_path(req.root_path, req.rel_path)
+        safe_name = re.sub(r'[<>:"/\\|?*]', '', os.path.basename((req.filename or "").strip()))
+        if not safe_name:
+            return {"status": "error", "error": "Invalid filename."}
+        b64 = req.data_b64.split(",", 1)[1] if "," in req.data_b64 else req.data_b64
+        raw_bytes = base64.b64decode(b64)
+        os.makedirs(target_dir, exist_ok=True)
+        with open(os.path.join(target_dir, safe_name), "wb") as f:
+            f.write(raw_bytes)
+        return {"status": "ok", "filename": safe_name}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/usb/download")
+def api_usb_download(req: UsbFileRequest):
+    try:
+        _, parent_dir, _ = _resolve_usb_safe_path(req.root_path, req.rel_path)
+        safe_name = os.path.basename((req.filename or "").strip())
+        fp = os.path.join(parent_dir, safe_name)
+        if not os.path.isfile(fp):
+            return Response(content="File not found.", status_code=404)
+        return FileResponse(fp, filename=safe_name)
+    except Exception as e:
+        return Response(content=str(e), status_code=500)
+
+
+@app.post("/api/usb/preview-image")
+def api_usb_preview_image(req: UsbFileRequest):
+    try:
+        _, parent_dir, _ = _resolve_usb_safe_path(req.root_path, req.rel_path)
+        safe_name = os.path.basename((req.filename or "").strip())
+        fp = os.path.join(parent_dir, safe_name)
+        if not os.path.isfile(fp):
+            return {"error": "Image file not found."}
+        encoded = urllib.parse.quote(fp, safe="")
+        return {"status": "ok", "url": f"/api/art-image/{encoded}?t={int(time.time() * 1000)}"}
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.post("/api/parse-file", response_model=GameFile)
 def parse_file(req: ParseRequest):
@@ -2356,7 +2852,7 @@ if __name__ == "__main__":
     host = "127.0.0.1"
     port = find_available_port(8000)
     url = f"http://{host}:{port}"
-    print(f"Starting PS2 ISO Manager Web Server at {url}...")
+    print(f"Starting PS2 ISO Manager v2.0 Web Server at {url}...")
     
     # 1. Start FastAPI in a background daemon thread
     threading.Thread(
@@ -2370,7 +2866,7 @@ if __name__ == "__main__":
     # 3. Create native window with pywebview on the MAIN thread
     import webview
     window = webview.create_window(
-        title="PS2 ISO Manager v1.5",
+        title="PS2 ISO Manager v2.0",
         url=url,
         width=1220,
         height=860,
