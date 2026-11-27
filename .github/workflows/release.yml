@@ -1,0 +1,181 @@
+name: Build & Release Windows Executable
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Attach built artifacts to a GitHub Release (tags only)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build PS2-ISO-Manager.exe
+    runs-on: windows-latest
+    outputs:
+      artifact_id: ${{ steps.upload_unsigned.outputs.artifact-id }}
+      app_version: ${{ steps.read_version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies & PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Read APP_VERSION
+        id: read_version
+        shell: pwsh
+        run: |
+          $content = Get-Content -Raw "ps2_utility/updater.py"
+          if ($content -match 'APP_VERSION\s*=\s*["'']([^"'']+)["'']') {
+            $ver = $Matches[1]
+          } else {
+            throw "Could not parse APP_VERSION from ps2_utility/updater.py"
+          }
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Building PS2 ISO Manager v$ver"
+
+      - name: Compile-check Python sources
+        run: |
+          python -m py_compile app.py ps2_utility/core.py ps2_utility/pfs.py ps2_utility/updater.py
+
+      - name: Fetch & SHA-256 verify bundled OSS CLI binaries
+        shell: pwsh
+        run: |
+          $expected = @{
+            "bchunk.exe"   = "0BAAB1A23D1CD9531CD10179640AB01D7159782B17161E04D4B747C65E34C083"
+            "ziso.exe"     = "510BED4FF180A765EE0517D0C0786E2012D1A9357E68DA7E5E5D9353D652EAB3"
+            "chdman.exe"   = "972CAD9FC243BA8D393CD9BFE566AF0740E9DF543B628B076B99FE77B8D24D20"
+            "hdl_dump.exe" = "BDEA67D805EC9D69E6BF846C33ED843C2A68411E8A010C1D14D38A3D63BE2A8B"
+            "pfsshell.exe" = "F199118A673BD38A02F1EE03613BC2DC75879F933257632908D04D8D9765B807"
+          }
+
+          # If tools/ contains the binaries, copy into root; otherwise download from pinned upstream/deps release archive
+          foreach ($name in $expected.Keys) {
+            if (-not (Test-Path $name) -and (Test-Path "tools/$name")) {
+              Copy-Item "tools/$name" $name -Force
+            }
+          }
+
+          $missing = @($expected.Keys | Where-Object { -not (Test-Path $_) })
+          if ($missing.Count -gt 0) {
+            $toolsUrl = "${{ vars.CLI_TOOLS_ARCHIVE_URL }}"
+            if (-not $toolsUrl) {
+              # Default fallback: extract missing CLI binaries from the repo's pinned OfficialRelease / v2.1.1 bundle if available
+              Write-Host "Fetching missing CLI tools: $($missing -join ', ')"
+              $tmpExe = Join-Path $env:RUNNER_TEMP "prev_bundle.exe"
+              Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/download/v2.1.1/PS2-ISO-Manager.exe" -OutFile $tmpExe
+              python -c "from PyInstaller.archive.readers import CArchiveReader; import os; r=CArchiveReader(r'$tmpExe'); [open(k,'wb').write(r.extract(k)) for k in ['bchunk.exe','ziso.exe','chdman.exe','hdl_dump.exe','pfsshell.exe'] if k in r.toc and not os.path.exists(k)]"
+              Remove-Item $tmpExe -Force -ErrorAction SilentlyContinue
+            } else {
+              $zipPath = Join-Path $env:RUNNER_TEMP "cli_tools.zip"
+              Invoke-WebRequest -Uri $toolsUrl -OutFile $zipPath
+              Expand-Archive -Path $zipPath -DestinationPath "." -Force
+              Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          foreach ($name in $expected.Keys) {
+            if (-not (Test-Path $name)) {
+              throw "Required CLI binary missing: $name"
+            }
+            $actual = (Get-FileHash $name -Algorithm SHA256).Hash.ToUpper()
+            if ($actual -ne $expected[$name]) {
+              throw "SHA-256 mismatch for $name! Expected $($expected[$name]), got $actual"
+            }
+            Write-Host "Verified $name ($actual)"
+          }
+
+      - name: Build standalone EXE with PyInstaller
+        run: |
+          pyinstaller app.spec --noconfirm --clean
+
+      - name: Generate unsigned SHA-256 checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash "dist/PS2-ISO-Manager.exe" -Algorithm SHA256).Hash.ToLower()
+          "$hash  PS2-ISO-Manager.exe" | Out-File -FilePath "dist/PS2-ISO-Manager.exe.sha256" -Encoding ascii -NoNewline
+          Write-Host "Unsigned EXE SHA-256: $hash"
+
+      - name: Upload unsigned build artifact
+        id: upload_unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: ps2-iso-manager-unsigned
+          path: |
+            dist/PS2-ISO-Manager.exe
+            dist/PS2-ISO-Manager.exe.sha256
+          if-no-files-found: error
+
+  sign_and_release:
+    name: Sign (SignPath) & Publish Release
+    needs: build
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true
+    steps:
+      - name: Checkout repository (for RELEASE_NOTES.md)
+        uses: actions/checkout@v4
+
+      - name: Download unsigned artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ps2-iso-manager-unsigned
+          path: release-out
+
+      - name: Submit signing request to SignPath Foundation
+        if: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'ps2-iso-manager' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          github-artifact-id: ${{ needs.build.outputs.artifact_id }}
+          wait-for-completion: true
+          output-artifact-directory: release-signed
+
+      - name: Prepare final release assets & SHA-256
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "final-assets" | Out-Null
+          $signedExe = Get-ChildItem -Path "release-signed" -Filter "PS2-ISO-Manager.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($signedExe) {
+            Write-Host "Using SignPath-signed executable: $($signedExe.FullName)"
+            Copy-Item $signedExe.FullName "final-assets/PS2-ISO-Manager.exe" -Force
+          } else {
+            Write-Host "SignPath secrets not configured yet — using unsigned CI build."
+            Copy-Item "release-out/PS2-ISO-Manager.exe" "final-assets/PS2-ISO-Manager.exe" -Force
+          }
+          $hash = (Get-FileHash "final-assets/PS2-ISO-Manager.exe" -Algorithm SHA256).Hash.ToLower()
+          "$hash  PS2-ISO-Manager.exe`n" | Out-File -FilePath "final-assets/PS2-ISO-Manager.exe.sha256" -Encoding ascii -NoNewline
+          Write-Host "Final release EXE SHA-256: $hash"
+
+      - name: Upload final release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ps2-iso-manager-release
+          path: final-assets/*
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "PS2 ISO Manager ${{ github.ref_name }}"
+          body_path: RELEASE_NOTES.md
+          files: |
+            final-assets/PS2-ISO-Manager.exe
+            final-assets/PS2-ISO-Manager.exe.sha256

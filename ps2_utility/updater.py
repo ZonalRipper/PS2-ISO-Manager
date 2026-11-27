@@ -11,7 +11,7 @@ from typing import Callable, Dict, Optional, Tuple
 
 from ps2_utility.core import format_size
 
-APP_VERSION = "2.1"
+APP_VERSION = "2.1.1"
 GITHUB_OWNER = "ZonalRipper"
 GITHUB_REPO = "PS2-ISO-Manager"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
@@ -287,17 +287,42 @@ def download_and_verify_update(
         return False, "", f"Update download failed: {e}"
 
 
-def launch_self_replace_updater(staged_exe_path: str) -> Tuple[bool, str]:
-    """Spawn a detached Windows batch helper that waits for this PID to exit, swaps the EXE, and relaunches it."""
-    if not can_self_update():
+def _clean_relaunch_env() -> Dict[str, str]:
+    """Return an environment dictionary stripped of PyInstaller onefile internal variables."""
+    env = os.environ.copy()
+    for key in list(env.keys()):
+        up = key.upper()
+        if up.startswith("_PYI_") or up.startswith("_MEIPASS") or up in ("TCL_LIBRARY", "TK_LIBRARY"):
+            env.pop(key, None)
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    return env
+
+
+def _ps_quote(value: str) -> str:
+    """Safely single-quote a string literal for PowerShell."""
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def launch_self_replace_updater(
+    staged_exe_path: str,
+    target_exe_override: Optional[str] = None,
+    wait_pid_override: Optional[int] = None,
+    relaunch: bool = True,
+) -> Tuple[bool, str]:
+    """Spawn a detached PowerShell helper that waits for this app & PyInstaller bootloader to exit,
+    safely swaps the EXE with retry + rollback protection, and relaunches the updated EXE.
+    """
+    if not target_exe_override and not can_self_update():
         return False, "Self-update is only available when running the standalone PS2-ISO-Manager.exe."
 
     if not staged_exe_path or not os.path.isfile(staged_exe_path):
         return False, "Staged update executable not found."
 
-    current_exe = os.path.abspath(sys.executable)
+    current_exe = os.path.abspath(target_exe_override or sys.executable)
     target_dir = os.path.dirname(current_exe)
-    pid = os.getpid()
+    target_stem = os.path.splitext(os.path.basename(current_exe))[0]
+    pid = int(wait_pid_override if wait_pid_override is not None else os.getpid())
+    ppid = int(os.getppid()) if wait_pid_override is None else 0
 
     # Ensure target directory is writable before committing to exit
     probe = os.path.join(target_dir, f".ps2_update_write_test_{pid}")
@@ -309,72 +334,144 @@ def launch_self_replace_updater(staged_exe_path: str) -> Tuple[bool, str]:
         return False, f"Cannot write to '{target_dir}'. Run PS2-ISO-Manager.exe as Administrator or move it to a writable folder."
 
     backup_exe = current_exe + ".bak"
-    script_path = os.path.join(tempfile.gettempdir(), f"ps2_iso_mgr_apply_{pid}.cmd")
-    stage_dir = os.path.dirname(staged_exe_path)
+    stage_dir = os.path.dirname(os.path.abspath(staged_exe_path))
+    temp_dir = tempfile.gettempdir()
+    script_path = os.path.join(temp_dir, f"ps2_iso_mgr_apply_{pid}.ps1")
+    log_path = os.path.join(temp_dir, "ps2_iso_mgr_update.log")
 
-    # Pure ASCII cmd script with retry loop and automatic rollback on copy failure
-    cmd_script = f"""@echo off
-setlocal
-set "PID={pid}"
-set "TARGET={current_exe}"
-set "STAGED={staged_exe_path}"
-set "BACKUP={backup_exe}"
-set "STAGEDIR={stage_dir}"
+    ps_script = f"""$ErrorActionPreference = 'Stop'
+$ChildPid = {pid}
+$ParentPid = {ppid}
+$Target = {_ps_quote(current_exe)}
+$TargetDir = {_ps_quote(target_dir)}
+$TargetStem = {_ps_quote(target_stem)}
+$Staged = {_ps_quote(os.path.abspath(staged_exe_path))}
+$Backup = {_ps_quote(backup_exe)}
+$StageDir = {_ps_quote(stage_dir)}
+$LogPath = {_ps_quote(log_path)}
+$DoRelaunch = {'$true' if relaunch else '$false'}
 
-rem Wait up to 25 seconds for the running app process to exit
-set /a WAIT=0
-:waitloop
-tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul
-if errorlevel 1 goto apply
-set /a WAIT+=1
-if %WAIT% GEQ 25 goto apply
-timeout /t 1 /nobreak >nul
-goto waitloop
+function Write-Log([string]$Msg) {{
+    try {{
+        $ts = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss.fff')
+        Add-Content -LiteralPath $LogPath -Value "[$ts] $Msg" -Encoding UTF8
+    }} catch {{}}
+}}
 
-:apply
-rem Small settle pause for PyInstaller bootloader cleanup
-timeout /t 1 /nobreak >nul
+Write-Log "Updater started (ChildPid=$ChildPid, ParentPid=$ParentPid, Target=$Target)"
 
-set /a TRY=0
-:swaploop
-if exist "%BACKUP%" del /f /q "%BACKUP%" >nul 2>&1
-move /y "%TARGET%" "%BACKUP%" >nul 2>&1
-if errorlevel 1 (
-    set /a TRY+=1
-    if %TRY% GEQ 12 goto rollback
-    timeout /t 1 /nobreak >nul
-    goto swaploop
-)
+# Clear any inherited PyInstaller environment variables so relaunched EXE extracts cleanly
+foreach ($v in @('_MEIPASS2', '_PYI_APPLICATION_HOME_DIR', '_PYI_ARCHIVE_FILE', '_PYI_PARENT_PROCESS_LEVEL', 'TCL_LIBRARY', 'TK_LIBRARY')) {{
+    Remove-Item -Path ("Env:" + $v) -ErrorAction SilentlyContinue
+}}
+$env:PYINSTALLER_RESET_ENVIRONMENT = '1'
 
-copy /y "%STAGED%" "%TARGET%" >nul 2>&1
-if errorlevel 1 goto rollback
+# 1. Wait for Python child PID to exit (up to 30s)
+for ($i = 0; $i -lt 60; $i++) {{
+    if (-not (Get-Process -Id $ChildPid -ErrorAction SilentlyContinue)) {{
+        Write-Log "Child PID $ChildPid exited after $($i * 500)ms"
+        break
+    }}
+    Start-Sleep -Milliseconds 500
+}}
 
-if exist "%BACKUP%" del /f /q "%BACKUP%" >nul 2>&1
-if exist "%STAGED%" del /f /q "%STAGED%" >nul 2>&1
-if exist "%STAGEDIR%" rmdir /s /q "%STAGEDIR%" >nul 2>&1
-start "" "%TARGET%"
-goto cleanup
+# 2. Wait for PyInstaller parent bootloader PID to exit if it is the same executable (up to 15s)
+if ($ParentPid -gt 0 -and $ParentPid -ne $ChildPid) {{
+    for ($i = 0; $i -lt 30; $i++) {{
+        $pp = Get-Process -Id $ParentPid -ErrorAction SilentlyContinue
+        if (-not $pp -or $pp.ProcessName -ne $TargetStem) {{
+            Write-Log "Parent bootloader PID $ParentPid finished after $($i * 500)ms"
+            break
+        }}
+        Start-Sleep -Milliseconds 500
+    }}
+}}
 
-:rollback
-if not exist "%TARGET%" if exist "%BACKUP%" move /y "%BACKUP%" "%TARGET%" >nul 2>&1
-start "" "%TARGET%"
+# Brief settle pause for Windows file handle release
+Start-Sleep -Milliseconds 500
 
-:cleanup
-del /f /q "%~f0" >nul 2>&1
+$expectedLen = (Get-Item -LiteralPath $Staged).Length
+$swapped = $false
+
+# 3. Move old EXE to .bak and copy staged EXE into place (up to 30 retries / 15s)
+for ($try = 1; $try -le 30; $try++) {{
+    try {{
+        if (Test-Path -LiteralPath $Backup) {{
+            Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
+        }}
+        if (Test-Path -LiteralPath $Target) {{
+            Move-Item -LiteralPath $Target -Destination $Backup -Force
+        }}
+        Copy-Item -LiteralPath $Staged -Destination $Target -Force
+        $actualLen = (Get-Item -LiteralPath $Target).Length
+        if ($actualLen -eq $expectedLen) {{
+            $swapped = $true
+            Write-Log "Swap succeeded on attempt $try ($actualLen bytes)"
+            break
+        }} else {{
+            throw "Byte size mismatch after copy ($actualLen != $expectedLen)"
+        }}
+    }} catch {{
+        Write-Log "Attempt $try failed: $($_.Exception.Message)"
+        if ((-not (Test-Path -LiteralPath $Target)) -and (Test-Path -LiteralPath $Backup)) {{
+            try {{ Move-Item -LiteralPath $Backup -Destination $Target -Force }} catch {{}}
+        }}
+        Start-Sleep -Milliseconds 500
+    }}
+}}
+
+if ($swapped) {{
+    Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $Staged -Force -ErrorAction SilentlyContinue
+    if ((Test-Path -LiteralPath $StageDir) -and ($StageDir -like '*ps2_iso_mgr_update_*')) {{
+        Remove-Item -LiteralPath $StageDir -Recurse -Force -ErrorAction SilentlyContinue
+    }}
+}} else {{
+    Write-Log "ERROR: All swap attempts failed; keeping original executable."
+    if ((-not (Test-Path -LiteralPath $Target)) -and (Test-Path -LiteralPath $Backup)) {{
+        try {{ Move-Item -LiteralPath $Backup -Destination $Target -Force }} catch {{}}
+    }}
+}}
+
+if ($DoRelaunch -and (Test-Path -LiteralPath $Target)) {{
+    Write-Log "Relaunching $Target"
+    try {{
+        Start-Process -FilePath $Target -WorkingDirectory $TargetDir
+    }} catch {{
+        Write-Log "Relaunch failed: $($_.Exception.Message)"
+    }}
+}}
+
+try {{ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue }} catch {{}}
 """
 
     try:
-        with open(script_path, "w", encoding="ascii", errors="ignore") as f:
-            f.write(cmd_script)
+        # Write UTF-8 with BOM so Windows PowerShell 5.1 handles Unicode paths cleanly
+        with open(script_path, "w", encoding="utf-8-sig") as f:
+            f.write(ps_script)
 
+        # Note: Never combine DETACHED_PROCESS with CREATE_NO_WINDOW on Windows (mutually exclusive in CreateProcess).
         flags = (
-            getattr(subprocess, "DETACHED_PROCESS", 0)
-            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
             | getattr(subprocess, "CREATE_NO_WINDOW", 0)
         )
         subprocess.Popen(
-            ["cmd.exe", "/c", script_path],
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-WindowStyle",
+                "Hidden",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             close_fds=True,
+            env=_clean_relaunch_env(),
             creationflags=flags,
         )
         return True, ""

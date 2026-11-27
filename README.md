@@ -1,6 +1,6 @@
-# 🎮 PS2 ISO Manager v2.1 — Open PS2 Loader (OPL) Suite
+# 🎮 PS2 ISO Manager v2.1.1 — Open PS2 Loader (OPL) Suite
 
-![Version](https://img.shields.io/badge/Version-2.1-0ea5e9?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.1.1-0ea5e9?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0051cc?style=for-the-badge&logo=windows)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
@@ -112,13 +112,29 @@ python app.py
 
 ### Building the Standalone Windows Executable (`.exe`)
 
-Precompiled Windows executables are available in GitHub Releases. To build locally with all tools and databases bundled:
+Precompiled Windows executables are available in GitHub Releases (built transparently via [GitHub Actions](.github/workflows/release.yml)). To build locally with all tools and databases bundled:
 
 ```powershell
 .\.venv\Scripts\pyinstaller.exe app.spec --noconfirm
 ```
 
 Output: `dist/PS2-ISO-Manager.exe`
+
+### Windows SmartScreen & Checksum Verification
+
+Because open-source indie releases are unsigned until code-signing approval is active, Windows Defender SmartScreen may display *"Windows protected your PC"* on first launch. Click **More info → Run anyway**, or verify the downloaded binary against the published `PS2-ISO-Manager.exe.sha256` file:
+
+```powershell
+Get-FileHash .\PS2-ISO-Manager.exe -Algorithm SHA256
+```
+
+You can also inspect our [Code Signing Policy](CODE_SIGNING_POLICY.md) or build from source above.
+
+---
+
+## 🔐 Code Signing Policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/) *(pending onboarding)*. See [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) for full details.
 
 ---
 
