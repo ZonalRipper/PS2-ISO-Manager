@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PS2 ISO Manager v2.0 — Liquid Glass Edition</title>
+    <title>PS2 ISO Manager v{{ app_version }} — Liquid Glass Edition</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
@@ -495,7 +495,7 @@
                     <div class="min-w-0">
                         <div class="font-extrabold text-sm tracking-tight truncate">ISO Manager</div>
                         <div class="text-[11px] text-mut font-mono flex items-center gap-1.5">
-                            <span>v2.0</span>
+                            <span>v{{ app_version }}</span>
                             <span class="px-1.5 py-0.2 rounded-full bg-sky-500/20 text-sky-400 border border-sky-400/30 text-[9px] font-bold">LIQUID GLASS</span>
                         </div>
                     </div>
@@ -586,6 +586,9 @@
                         <button id="nav-pfs-gallery" onclick="openPfsGalleryDirectly()" class="nav-item">
                             <span>🎨</span><span class="truncate">PFS 3D Gallery</span>
                         </button>
+                        <button id="nav-pfs-format" onclick="navigateTo('pfs-format')" class="nav-item">
+                            <span>🔥</span><span class="truncate">Format Drive to PFS</span>
+                        </button>
                     </div>
                 </div>
 
@@ -618,8 +621,12 @@
                 </div>
             </nav>
 
-            <!-- Sidebar Footer: Admin Pill, Theme Toggle & Info -->
+            <!-- Sidebar Footer: Update Pill, Admin Pill, Theme Toggle & Info -->
             <div class="p-3 border-t border-white/10 space-y-2">
+                <button id="sidebar-update-pill" onclick="openUpdateModal()" class="hidden w-full px-3 py-2 rounded-xl text-[11px] font-bold flex items-center justify-between gap-2 border border-emerald-400/45 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 shadow-md transition">
+                    <span class="flex items-center gap-1.5 truncate"><span>⬆️</span><span id="sidebar-update-label" class="truncate">Update Available</span></span>
+                    <span class="font-mono text-[10px] text-emerald-300 shrink-0">Install</span>
+                </button>
                 <button id="sidebar-admin-pill" onclick="handleSidebarAdminClick()" class="w-full px-3 py-2 rounded-xl text-[11px] font-semibold flex items-center justify-between gap-2 border border-white/15 bg-white/5 hover:bg-white/10 transition">
                     <span class="flex items-center gap-1.5 truncate"><span id="sidebar-admin-dot">⏳</span><span id="sidebar-admin-label" class="truncate">Checking privileges...</span></span>
                     <span id="sidebar-admin-action" class="font-mono text-[10px] text-sky-400 shrink-0"></span>
@@ -1261,6 +1268,120 @@
                     </div>
                 </section>
 
+                <!-- ==================== VIEW 2C: FORMAT DRIVE TO PS2 APA / PFS ==================== -->
+                <section id="section-pfs-format" class="hidden fade-slide flex-1 flex flex-col gap-4">
+                    <!-- Admin & Safety Notice -->
+                    <div id="pfs-format-admin-bar" class="hidden glass-panel rounded-2xl px-4 py-3 border border-amber-400/45 bg-amber-500/15 text-xs flex flex-wrap items-center justify-between gap-2">
+                        <span>⚠️ <strong>Administrator privileges are required</strong> to clear Windows partitions and initialize a PlayStation 2 APA / PFS drive.</span>
+                        <button onclick="restartAsAdmin()" class="glass-btn-primary rounded-lg px-3.5 py-1.5 text-xs font-bold">🛡️ Restart as Administrator</button>
+                    </div>
+
+                    <!-- Step 1: Physical Disk Selection -->
+                    <div class="glass-panel rounded-3xl p-4 sm:p-5 space-y-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <h2 class="text-sm sm:text-base font-extrabold flex items-center gap-2"><span>💽</span> Step 1: Select Physical Drive to Format</h2>
+                                <p class="text-xs text-sec mt-0.5">Windows OS/Boot disks, Read-Only disks, and drives over the 2 TB APA limit are automatically locked and protected.</p>
+                            </div>
+                            <button id="pfs-format-scan-btn" onclick="pfsFormatScanDisks()" class="glass-btn rounded-xl px-3.5 py-2 text-xs font-bold">🔍 Rescan Physical Disks</button>
+                        </div>
+
+                        <div class="glass-sub rounded-2xl overflow-auto max-h-[clamp(200px,34vh,360px)]">
+                            <table class="w-full text-left border-collapse whitespace-nowrap text-xs sm:text-sm">
+                                <thead class="glass-thead sticky top-0 z-10 text-[11px] uppercase text-mut">
+                                    <tr>
+                                        <th class="px-4 py-2.5">Drive ID</th>
+                                        <th class="px-4 py-2.5">Hardware Model</th>
+                                        <th class="px-4 py-2.5 text-center">Bus</th>
+                                        <th class="px-4 py-2.5 text-center">Capacity</th>
+                                        <th class="px-4 py-2.5 text-center">Current Layout</th>
+                                        <th class="px-4 py-2.5 text-right">Status / Select</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pfs-format-disks-tbody" class="divide-y divide-white/10">
+                                    <tr><td colspan="6" class="px-4 py-8 text-center text-mut text-xs">Click Rescan Physical Disks to detect connected drives.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Format Options & Safety Confirmation -->
+                    <div id="pfs-format-config-panel" class="hidden glass-panel rounded-3xl p-4 sm:p-5 space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+                            <div>
+                                <h2 class="text-sm sm:text-base font-extrabold flex items-center gap-2"><span>⚙️</span> Step 2: Configure PS2 APA / PFS Format</h2>
+                                <p id="pfs-format-selected-summary" class="text-xs font-mono text-sky-400 mt-0.5"></p>
+                            </div>
+                            <button onclick="pfsFormatClearSelection()" class="glass-btn rounded-xl px-3 py-1.5 text-xs font-semibold">Change Drive</button>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            <div class="glass-sub rounded-2xl p-3.5 space-y-2.5">
+                                <label class="flex items-start gap-2.5 cursor-pointer">
+                                    <input type="checkbox" id="pfs-format-create-opl" checked onchange="document.getElementById('pfs-format-opl-size-wrap').classList.toggle('opacity-50', !this.checked)" class="custom-control mt-0.5">
+                                    <div>
+                                        <div class="font-bold">Create &amp; Format <code class="font-mono text-sky-400">+OPL</code> PFS Partition</div>
+                                        <div class="text-sec mt-0.5">Automatically creates <code class="font-mono">ART/</code>, <code class="font-mono">CFG/</code>, <code class="font-mono">VMC/</code>, <code class="font-mono">CHT/</code>, <code class="font-mono">THM/</code>, and <code class="font-mono">APPS/</code> inside <code class="font-mono">+OPL</code>.</div>
+                                    </div>
+                                </label>
+                                <div id="pfs-format-opl-size-wrap" class="flex items-center justify-between gap-2 pt-2 border-t border-white/10 transition-opacity">
+                                    <span class="font-semibold text-sec">+OPL Partition Size:</span>
+                                    <select id="pfs-format-opl-size" class="glass-input rounded-xl px-3 py-1.5 font-mono text-xs font-bold">
+                                        <option value="128">128 MB</option>
+                                        <option value="256" selected>256 MB (Recommended)</option>
+                                        <option value="512">512 MB (Large Art / VMC)</option>
+                                        <option value="1024">1024 MB (1 GB)</option>
+                                        <option value="2048">2048 MB (2 GB)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="glass-sub rounded-2xl p-3.5 space-y-2">
+                                <label class="flex items-start gap-2.5 cursor-pointer">
+                                    <input type="checkbox" id="pfs-format-clear-win" checked class="custom-control mt-0.5">
+                                    <div>
+                                        <div class="font-bold">Clear Existing Windows Partitions (<code class="font-mono text-amber-300">diskpart clean</code>)</div>
+                                        <div class="text-sec mt-0.5">Recommended for NTFS/exFAT/FAT32 drives so Windows releases volume locks before APA initialization.</div>
+                                    </div>
+                                </label>
+                                <div class="text-[11px] text-mut pt-1 border-t border-white/10">
+                                    Note: After formatting to APA/PFS, Windows Disk Management will show the drive as "Unallocated/RAW" — this is normal for PlayStation 2 drives.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Destructive Safety Confirmation Gate -->
+                        <div class="rounded-2xl p-4 border border-red-400/45 bg-red-500/12 space-y-3">
+                            <div class="flex items-start gap-2.5 text-xs">
+                                <span class="text-lg shrink-0">⚠️</span>
+                                <div>
+                                    <div class="font-extrabold text-red-300 uppercase tracking-wide">Permanent Data Erasure Warning</div>
+                                    <p id="pfs-format-danger-text" class="text-sec mt-0.5 leading-relaxed">Formatting will permanently destroy all existing partitions and files on the selected physical drive.</p>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap sm:flex-nowrap items-center gap-2.5">
+                                <div class="flex-1 min-w-[220px]">
+                                    <label class="block text-[11px] font-semibold text-sec mb-1">Type <code id="pfs-format-required-phrase" class="font-mono font-extrabold text-red-300 bg-black/30 px-2 py-0.5 rounded">FORMAT hdd?:</code> to unlock:</label>
+                                    <input id="pfs-format-confirm-input" oninput="updatePfsFormatButtonState()" placeholder="Type confirmation phrase..." autocomplete="off" class="glass-input w-full rounded-xl px-3.5 py-2 font-mono text-xs uppercase">
+                                </div>
+                                <button id="pfs-format-run-btn" onclick="startPfsDriveFormat()" disabled class="glass-btn-danger rounded-xl px-5 py-2.5 text-xs sm:text-sm font-extrabold shrink-0 self-end">🔥 Format Drive to PS2 APA / PFS</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Live Format Progress Terminal -->
+                    <div id="pfs-format-log-panel" class="hidden glass-panel rounded-2xl p-4 space-y-2.5">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <span id="pfs-format-log-title" class="text-xs font-bold uppercase tracking-wider text-sec">📜 Format Progress Log</span>
+                            <div class="flex items-center gap-2">
+                                <button id="pfs-format-open-browser-btn" onclick="pfsFormatOpenInBrowser()" class="hidden glass-btn-emerald rounded-xl px-3.5 py-1.5 text-xs font-bold">💽 Open in PFS Drive Browser</button>
+                                <button onclick="copyTerminalLogs('pfs-format-log')" class="glass-btn rounded-lg px-3 py-1 text-xs font-semibold">📋 Copy</button>
+                            </div>
+                        </div>
+                        <div id="pfs-format-log" class="bg-black/65 text-gray-200 rounded-xl p-4 font-mono text-xs h-[clamp(150px,24vh,300px)] resize-y overflow-y-auto border border-white/10"></div>
+                    </div>
+                </section>
+
                 <!-- ==================== VIEW 3: FOCUSED SINGLE-TOOL WORKSPACE (USB / PFS / PC) ==================== -->
                 <section id="section-tool" class="hidden fade-slide flex-1 flex flex-col gap-5">
                     <!-- Tool Action Card -->
@@ -1539,12 +1660,19 @@
             <div class="flex justify-between items-start border-b border-white/15 pb-3 mb-4">
                 <div>
                     <h3 class="text-lg font-extrabold">🫧 PS2 ISO Manager</h3>
-                    <p class="text-xs text-sky-400 font-mono">Version 2.0 — Liquid Glass GUI</p>
+                    <p class="text-xs text-sky-400 font-mono">Version {{ app_version }} — Liquid Glass GUI</p>
                 </div>
                 <button onclick="closeAboutModal()" class="glass-btn w-8 h-8 rounded-full text-xs">✕</button>
             </div>
             <div class="text-xs text-sec space-y-3 leading-relaxed">
                 <p>Manage, convert, compress, rename, browse, and organize PlayStation 2 game libraries for <strong>Open PS2 Loader (OPL)</strong> across USB, exFAT/FAT32, SMB, and Internal <strong>APA / PFS</strong> hard drives.</p>
+                <div class="glass-sub rounded-2xl p-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <div class="font-bold text-[11px] uppercase tracking-wider text-sky-400">🔄 GitHub Auto-Updater</div>
+                        <div id="about-update-status" class="text-[11px] text-sec mt-0.5">Checks ZonalRipper/PS2-ISO-Manager Releases on GitHub.</div>
+                    </div>
+                    <button id="about-check-update-btn" onclick="checkForUpdates(false, true)" class="glass-btn-primary rounded-xl px-3.5 py-1.5 text-[11px] font-bold shrink-0">🔄 Check for Updates</button>
+                </div>
                 <div class="border-t border-white/10 pt-3">
                     <div class="font-bold uppercase tracking-wider text-[11px] text-sky-400 mb-2">Credits &amp; Attributions</div>
                     <ul class="space-y-1.5">
@@ -1557,6 +1685,53 @@
                 </div>
             </div>
             <div class="flex justify-end mt-5"><button onclick="closeAboutModal()" class="glass-btn-primary rounded-xl px-5 py-2 text-xs font-bold">Close</button></div>
+        </div>
+    </div>
+
+    <!-- GitHub Update Modal -->
+    <div id="update-modal" class="modal-backdrop fixed inset-0 bg-black/65 backdrop-blur-md hidden flex items-center justify-center z-[90]" onclick="if(event.target === this) closeUpdateModal()">
+        <div class="modal-card glass-panel rounded-3xl p-6 max-w-xl w-full mx-4 max-h-[88vh] flex flex-col gap-4 overflow-hidden">
+            <div class="flex justify-between items-start border-b border-white/15 pb-3">
+                <div>
+                    <h3 class="text-lg font-extrabold flex items-center gap-2"><span>⬆️</span> Update Available</h3>
+                    <div class="flex flex-wrap items-center gap-2 mt-1 text-xs font-mono">
+                        <span id="update-ver-current" class="px-2 py-0.5 rounded-full bg-white/10 text-sec">v{{ app_version }}</span>
+                        <span class="text-mut">→</span>
+                        <span id="update-ver-latest" class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/35 font-bold">v{{ app_version }}</span>
+                        <span id="update-meta-info" class="text-[11px] text-mut"></span>
+                    </div>
+                </div>
+                <button id="update-close-x" onclick="closeUpdateModal()" class="glass-btn w-8 h-8 rounded-full text-xs">✕</button>
+            </div>
+
+            <div class="glass-sub rounded-2xl p-4 overflow-y-auto max-h-[34vh] text-xs text-sec space-y-1.5 leading-relaxed">
+                <div class="text-[10px] font-bold uppercase tracking-wider text-sky-400 mb-1">Release Notes</div>
+                <div id="update-notes-body" class="whitespace-pre-wrap break-words font-sans"></div>
+            </div>
+
+            <div id="update-dev-notice" class="hidden rounded-xl px-3.5 py-2.5 border border-sky-400/35 bg-sky-500/15 text-xs text-sec">
+                ℹ️ Running from Python source — automatic self-replacement is enabled in the standalone <code class="font-mono text-sky-300">PS2-ISO-Manager.exe</code> build. Click <strong>View on GitHub</strong> or run <code class="font-mono">git pull</code>.
+            </div>
+
+            <div id="update-progress-wrap" class="hidden glass-sub rounded-2xl p-3.5 space-y-2">
+                <div class="flex justify-between items-center text-xs">
+                    <span id="update-progress-label" class="font-semibold text-sky-300">Downloading update...</span>
+                    <span id="update-progress-pct" class="font-mono font-bold text-emerald-300">0%</span>
+                </div>
+                <div class="w-full bg-white/10 rounded-full h-2.5 overflow-hidden">
+                    <div id="update-progress-bar" class="bg-gradient-to-r from-sky-400 via-cyan-400 to-emerald-400 h-2.5 transition-all duration-200" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div id="update-error-box" class="hidden rounded-xl px-3.5 py-2.5 border border-red-400/40 bg-red-500/15 text-xs text-red-300"></div>
+
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <button onclick="openUpdateReleaseUrl()" class="glass-btn rounded-xl px-4 py-2 text-xs font-bold">🌐 View on GitHub</button>
+                <div class="flex items-center gap-2 ml-auto">
+                    <button id="update-later-btn" onclick="closeUpdateModal()" class="glass-btn rounded-xl px-4 py-2 text-xs font-semibold">Later</button>
+                    <button id="update-install-btn" onclick="startAutomaticUpdate()" class="glass-btn-emerald rounded-xl px-5 py-2 text-xs font-extrabold">⬇️ Download &amp; Install</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1675,6 +1850,7 @@
             'wizard':        { section: 'wizard', title: 'Auto Pilot Wizard', pill: 'ALL DRIVES', pillCls: 'bg-sky-500/20 text-sky-300 border-sky-400/35', sub: 'Guided 7-step setup for USB, exFAT/FAT32, SMB, or Internal PS2 HDDs.' },
             'usb-browser':   { section: 'usb-browser', title: 'USB / exFAT / SMB Drive Browser', pill: 'USB / exFAT / SMB', pillCls: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/35', sub: 'Browse games, OPL folders, artwork, CFGs, and files on USB drives, exFAT/FAT32, or SMB shares.' },
             'pfs-browser':   { section: 'pfs-browser', title: 'PS2 APA / PFS Drive Browser', pill: 'APA / PFS HDD', pillCls: 'bg-sky-500/20 text-sky-300 border-sky-400/35', sub: 'Manage installed HDL games, browse +OPL files, and inspect APA partitions.' },
+            'pfs-format':    { section: 'pfs-format', title: 'Format Drive to PS2 APA / PFS', pill: 'APA / PFS HDD', pillCls: 'bg-sky-500/20 text-sky-300 border-sky-400/35', sub: 'Initialize a non-OS hard drive for PlayStation 2 APA and create a ready-to-use +OPL PFS partition.' },
             'usb-art':       { section: 'tool', action: 'art', scope: 'usb', icon: '🖼️', title: 'OPL Art Scraper', pill: 'USB / exFAT / SMB', pillCls: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/35', sub: 'Audit ART/ folder and download missing 6-piece OPL artwork.' },
             'usb-cfg':       { section: 'tool', action: 'cfg', scope: 'usb', icon: '📝', title: 'OPL CFG Generator', pill: 'USB / exFAT / SMB', pillCls: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/35', sub: 'Generate or update CFG/*.cfg metadata while preserving Compatibility Modes.' },
             'usb-clean':     { section: 'tool', action: 'clean', scope: 'usb', icon: '🧹', title: 'OPL Drive Cleaner', pill: 'USB / exFAT / SMB', pillCls: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/35', sub: 'Find and remove orphaned ART files, duplicate games, and .part temp files.' },
@@ -1720,7 +1896,7 @@
             triggerGlassAnim(tbTitle, 'anim-topbar-swap');
             triggerGlassAnim(pill, 'anim-topbar-swap');
 
-            ['wizard', 'usb-browser', 'pfs-browser', 'tool'].forEach(sec => {
+            ['wizard', 'usb-browser', 'pfs-browser', 'pfs-format', 'tool'].forEach(sec => {
                 const secEl = document.getElementById(`section-${sec}`);
                 const isTarget = sec === meta.section;
                 secEl.classList.toggle('hidden', !isTarget);
@@ -1734,6 +1910,8 @@
                 await usbBrowserScanDrives(usbBrowserRoot || selectedDestFolder);
             } else if (meta.section === 'pfs-browser') {
                 await pfsBrowserScanDrives(pfsBrowserDevice || selectedPfsDevice);
+            } else if (meta.section === 'pfs-format') {
+                await pfsFormatScanDisks();
             } else if (meta.section === 'tool') {
                 activeToolAction = meta.action;
                 activeToolScope = meta.scope;
@@ -2674,6 +2852,199 @@
             const d = await r.json(); if (d.status === 'ok') await pfsBrowserSelectDrive(pfsBrowserDevice); else showAppNotice(d.error || 'Failed', 'Error', 'error');
         }
 
+        // --- FORMAT DRIVE TO PS2 APA / PFS ---
+        let pfsFormatDisksCache = [];
+        let pfsFormatSelectedDisk = null;
+        let pfsFormatRunning = false;
+        let pfsFormatLastSuccessDevice = '';
+
+        async function pfsFormatScanDisks() {
+            const btn = document.getElementById('pfs-format-scan-btn');
+            const tb = document.getElementById('pfs-format-disks-tbody');
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Scanning...'; }
+            tb.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-sky-400 text-xs animate-pulse">Scanning Windows physical disks...</td></tr>`;
+            try {
+                await refreshSidebarAdmin();
+                const res = await fetch('/api/pfs/physical-disks');
+                const data = await res.json();
+                const isAdm = Boolean(data.is_admin);
+                document.getElementById('pfs-format-admin-bar').classList.toggle('hidden', isAdm);
+                if (data.error) {
+                    tb.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-red-400 text-xs">${escapeHtml(data.error)}</td></tr>`;
+                    return;
+                }
+                pfsFormatDisksCache = data.disks || [];
+                if (!pfsFormatDisksCache.length) {
+                    tb.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-mut text-xs">No physical disks detected.</td></tr>`;
+                    return;
+                }
+                renderPfsFormatDisks();
+            } catch (err) {
+                tb.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-red-400 text-xs">Scan failed: ${escapeHtml(err.message)}</td></tr>`;
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '🔍 Rescan Physical Disks'; }
+            }
+        }
+
+        function renderPfsFormatDisks() {
+            const tb = document.getElementById('pfs-format-disks-tbody');
+            tb.innerHTML = pfsFormatDisksCache.map((d, idx) => {
+                const isSel = pfsFormatSelectedDisk && pfsFormatSelectedDisk.device === d.device;
+                const lettersTxt = (d.letters || []).length ? ` (${d.letters.join(', ')})` : '';
+                const layoutBadge = d.is_ps2
+                    ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-sky-500/20 text-sky-300 border border-sky-400/35">PS2 APA</span>`
+                    : `<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/10 text-sec">${escapeHtml(d.partition_style)}${escapeHtml(lettersTxt)}</span>`;
+                if (d.is_protected) {
+                    return `<tr class="opacity-55">
+                        <td class="px-4 py-2.5 font-mono text-xs text-mut">${escapeHtml(d.device)}<div class="text-[10px]">${escapeHtml(d.physical_drive)}</div></td>
+                        <td class="px-4 py-2.5 font-semibold max-w-[26vw] truncate" title="${escapeHtml(d.friendly_name)}">${escapeHtml(d.friendly_name)}</td>
+                        <td class="px-4 py-2.5 text-center font-mono text-xs text-mut">${escapeHtml(d.bus_type)}</td>
+                        <td class="px-4 py-2.5 text-center font-mono text-xs text-sec">${escapeHtml(d.size_fmt)}</td>
+                        <td class="px-4 py-2.5 text-center">${layoutBadge}</td>
+                        <td class="px-4 py-2.5 text-right"><span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-400/30" title="${escapeHtml(d.protect_reason)}">🛡️ Protected (${escapeHtml(d.protect_reason)})</span></td>
+                    </tr>`;
+                }
+                return `<tr class="glass-row transition cursor-pointer ${isSel ? 'bg-sky-500/15' : ''}" onclick="pfsFormatSelectDisk(${idx})">
+                    <td class="px-4 py-2.5 font-mono text-xs font-bold text-sky-400">${escapeHtml(d.device)}<div class="text-[10px] font-normal text-mut">${escapeHtml(d.physical_drive)}</div></td>
+                    <td class="px-4 py-2.5 font-semibold max-w-[26vw] truncate" title="${escapeHtml(d.friendly_name)}">${escapeHtml(d.friendly_name)}</td>
+                    <td class="px-4 py-2.5 text-center font-mono text-xs text-sec">${escapeHtml(d.bus_type)}</td>
+                    <td class="px-4 py-2.5 text-center font-mono text-xs font-semibold">${escapeHtml(d.size_fmt)}</td>
+                    <td class="px-4 py-2.5 text-center">${layoutBadge}</td>
+                    <td class="px-4 py-2.5 text-right"><button type="button" onclick="event.stopPropagation(); pfsFormatSelectDisk(${idx})" class="${isSel ? 'glass-btn-primary' : 'glass-btn'} rounded-xl px-3 py-1 text-[11px] font-bold">${isSel ? '✓ Selected' : 'Select Drive'}</button></td>
+                </tr>`;
+            }).join('');
+        }
+
+        function pfsFormatSelectDisk(idx) {
+            if (pfsFormatRunning) return;
+            const d = pfsFormatDisksCache[idx];
+            if (!d || d.is_protected) return;
+            pfsFormatSelectedDisk = d;
+            renderPfsFormatDisks();
+            const panel = document.getElementById('pfs-format-config-panel');
+            panel.classList.remove('hidden');
+            triggerGlassAnim(panel, 'anim-tab-reveal');
+            const lettersStr = (d.letters || []).length ? ` • Mounted Windows Volumes: ${d.letters.join(', ')}` : ' • No Windows drive letters';
+            document.getElementById('pfs-format-selected-summary').textContent = `${d.device} (${d.physical_drive}) — ${d.friendly_name} • ${d.size_fmt} • ${d.bus_type}${lettersStr}`;
+            document.getElementById('pfs-format-danger-text').textContent = `ALL DATA on "${d.friendly_name}" (${d.device} / ${d.size_fmt}${lettersStr}) will be permanently erased and replaced with a PlayStation 2 APA partition table.`;
+            document.getElementById('pfs-format-required-phrase').textContent = d.confirm_phrase;
+            const inp = document.getElementById('pfs-format-confirm-input');
+            inp.value = '';
+            inp.placeholder = d.confirm_phrase;
+            document.getElementById('pfs-format-clear-win').checked = !d.is_ps2;
+            updatePfsFormatButtonState();
+        }
+
+        function pfsFormatClearSelection() {
+            if (pfsFormatRunning) return;
+            pfsFormatSelectedDisk = null;
+            document.getElementById('pfs-format-config-panel').classList.add('hidden');
+            renderPfsFormatDisks();
+        }
+
+        function updatePfsFormatButtonState() {
+            const btn = document.getElementById('pfs-format-run-btn');
+            if (!pfsFormatSelectedDisk || pfsFormatRunning || !isRunningAdmin) {
+                btn.disabled = true;
+                return;
+            }
+            const typed = (document.getElementById('pfs-format-confirm-input')?.value || '').trim().toUpperCase();
+            const req = (pfsFormatSelectedDisk.confirm_phrase || '').toUpperCase();
+            btn.disabled = (typed !== req);
+        }
+
+        async function startPfsDriveFormat() {
+            if (!pfsFormatSelectedDisk || pfsFormatRunning) return;
+            if (!isRunningAdmin) { showAppNotice('Please click Restart as Administrator first.', 'Admin Required', 'warning'); return; }
+            const d = pfsFormatSelectedDisk;
+            const phrase = (document.getElementById('pfs-format-confirm-input')?.value || '').trim();
+            if (phrase.toUpperCase() !== d.confirm_phrase.toUpperCase()) return;
+            if (!window.confirm(`FINAL CONFIRMATION:\n\nErase ALL data on ${d.friendly_name} (${d.device}, ${d.size_fmt}) and format it as a PlayStation 2 APA / PFS drive?`)) return;
+
+            const createOpl = document.getElementById('pfs-format-create-opl').checked;
+            const oplSizeMb = parseInt(document.getElementById('pfs-format-opl-size').value, 10) || 256;
+            const clearWin = document.getElementById('pfs-format-clear-win').checked;
+
+            pfsFormatRunning = true;
+            updatePfsFormatButtonState();
+            const logPanel = document.getElementById('pfs-format-log-panel');
+            const logEl = document.getElementById('pfs-format-log');
+            const titleEl = document.getElementById('pfs-format-log-title');
+            const openBtn = document.getElementById('pfs-format-open-browser-btn');
+            logPanel.classList.remove('hidden');
+            openBtn.classList.add('hidden');
+            titleEl.textContent = `⏳ Formatting ${d.device} to PS2 APA / PFS...`;
+            logEl.innerHTML = '';
+
+            try {
+                const res = await fetch('/api/pfs/format-drive', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        device: d.device,
+                        confirm_phrase: phrase,
+                        create_opl: createOpl,
+                        opl_size_mb: oplSizeMb,
+                        clear_windows_layout: clearWin
+                    })
+                });
+                const startData = await res.json();
+                if (startData.status !== 'started') {
+                    pfsFormatRunning = false;
+                    updatePfsFormatButtonState();
+                    titleEl.textContent = '❌ Format Aborted';
+                    showAppNotice(startData.error || 'Could not start drive format.', 'Format Error', 'error');
+                    return;
+                }
+
+                const sid = startData.session_id;
+                let lastIdx = 0, busy = false, succeeded = false;
+                const iv = setInterval(async () => {
+                    if (busy) return; busy = true;
+                    try {
+                        const pr = await fetch(`/api/poll-logs?session_id=${sid}&last_index=${lastIdx}`);
+                        const pd = await pr.json();
+                        (pd.logs || []).forEach(msg => {
+                            const line = document.createElement('div');
+                            line.className = 'mb-0.5';
+                            if (msg.includes('[ERROR]')) line.classList.add('text-red-400', 'font-bold');
+                            else if (msg.includes('[DONE]') || msg.includes('[SUCCESS]')) { line.classList.add('text-emerald-400', 'font-bold'); if (msg.includes('[DONE]')) succeeded = true; }
+                            else if (msg.includes('[PFSSHELL]') || msg.includes('[DISKPART]')) line.classList.add('text-sky-300');
+                            else if (msg.includes('[WARNING]')) line.classList.add('text-amber-300');
+                            line.textContent = `> ${msg}`;
+                            logEl.appendChild(line);
+                        });
+                        logEl.scrollTop = logEl.scrollHeight;
+                        lastIdx = pd.next_index;
+                        if (!pd.is_running && lastIdx >= pd.next_index) {
+                            clearInterval(iv);
+                            pfsFormatRunning = false;
+                            if (succeeded) {
+                                pfsFormatLastSuccessDevice = d.device;
+                                pfsBrowserDevice = d.device;
+                                titleEl.textContent = `✅ Format Complete — ${d.device} is Ready for PS2 OPL!`;
+                                openBtn.classList.remove('hidden');
+                                showAppNotice(`${d.friendly_name} (${d.device}) is now formatted as PS2 APA/PFS!`, 'Format Complete', 'success');
+                            } else {
+                                titleEl.textContent = `❌ Format Failed on ${d.device}`;
+                            }
+                            await pfsFormatScanDisks();
+                            updatePfsFormatButtonState();
+                        }
+                    } finally { busy = false; }
+                }, 250);
+            } catch (err) {
+                pfsFormatRunning = false;
+                updatePfsFormatButtonState();
+                showAppNotice(`Format request failed: ${err.message}`, 'Format Error', 'error');
+            }
+        }
+
+        async function pfsFormatOpenInBrowser() {
+            if (pfsFormatLastSuccessDevice) pfsBrowserDevice = pfsFormatLastSuccessDevice;
+            await navigateTo('pfs-browser');
+        }
+
         // --- FOCUSED TOOL WORKSPACE (USB / PFS / PC) ---
         async function scanPfsDrivesForTool(autoSelect = false) {
             const sel = document.getElementById('tool-pfs-select');
@@ -3061,6 +3432,164 @@
             if (p.recent_toolkit && activeToolAction) { tkActivePath = p.recent_toolkit; await renderToolkitPreview(activeToolAction, p.recent_toolkit); }
         }
 
+        // --- GITHUB AUTO-UPDATER ---
+        const APP_VERSION = '{{ app_version }}';
+        let latestUpdateInfo = null;
+        let updateBusy = false;
+
+        async function checkForUpdates(silent = true, force = false) {
+            const btn = document.getElementById('about-check-update-btn');
+            const st = document.getElementById('about-update-status');
+            if (!silent && btn) { btn.disabled = true; btn.textContent = '⏳ Checking...'; }
+            if (!silent && st) st.textContent = 'Checking GitHub Releases...';
+            try {
+                const res = await fetch(`/api/update/check${force ? '?force=1' : ''}`);
+                const data = await res.json();
+                latestUpdateInfo = data;
+                const pill = document.getElementById('sidebar-update-pill');
+                const pillLbl = document.getElementById('sidebar-update-label');
+
+                if (data.status === 'ok' && data.update_available) {
+                    if (pill) {
+                        pill.classList.remove('hidden');
+                        triggerGlassAnim(pill, 'anim-tab-reveal');
+                    }
+                    if (pillLbl) pillLbl.textContent = `Update v${data.latest_version}`;
+                    if (st) st.innerHTML = `<span class="text-emerald-400 font-bold">New version v${escapeHtml(data.latest_version)} available!</span> <button onclick="closeAboutModal(); openUpdateModal();" class="underline text-sky-400 ml-1">View &amp; Install</button>`;
+                    if (!silent) { closeAboutModal(); openUpdateModal(); }
+                } else if (data.status === 'ok') {
+                    if (pill) pill.classList.add('hidden');
+                    if (st) st.textContent = `✓ You're up to date (v${data.current_version || APP_VERSION}).`;
+                    if (!silent) showAppNotice(`PS2 ISO Manager v${data.current_version || APP_VERSION} is already the latest release on GitHub.`, 'Up to Date', 'success');
+                } else {
+                    if (st) st.textContent = data.error || 'Could not reach GitHub.';
+                    if (!silent) showAppNotice(data.error || 'Could not check GitHub for updates (offline or rate-limited).', 'Update Check Failed', 'warning');
+                }
+            } catch (err) {
+                if (st && !silent) st.textContent = 'Could not reach GitHub.';
+                if (!silent) showAppNotice('Could not reach GitHub to check for updates.', 'Offline', 'warning');
+            } finally {
+                if (!silent && btn) { btn.disabled = false; btn.textContent = '🔄 Check for Updates'; }
+            }
+        }
+
+        function openUpdateModal() {
+            if (!latestUpdateInfo) return;
+            const d = latestUpdateInfo;
+            document.getElementById('update-ver-current').textContent = `v${d.current_version || APP_VERSION}`;
+            document.getElementById('update-ver-latest').textContent = `v${d.latest_version || ''}`;
+            const metaParts = [];
+            if (d.published_at) metaParts.push(d.published_at);
+            if (d.asset_size_fmt && d.asset_size_fmt !== 'Unknown') metaParts.push(d.asset_size_fmt);
+            document.getElementById('update-meta-info').textContent = metaParts.join(' • ');
+            document.getElementById('update-notes-body').textContent = d.release_notes || 'No release notes provided for this version.';
+
+            const canAuto = Boolean(d.can_self_update && d.download_url);
+            document.getElementById('update-dev-notice').classList.toggle('hidden', Boolean(d.can_self_update));
+            const installBtn = document.getElementById('update-install-btn');
+            installBtn.classList.toggle('hidden', !canAuto);
+            installBtn.disabled = updateBusy;
+            installBtn.textContent = '⬇️ Download & Install';
+            document.getElementById('update-error-box').classList.add('hidden');
+            if (!updateBusy) document.getElementById('update-progress-wrap').classList.add('hidden');
+            document.getElementById('update-modal').classList.remove('hidden');
+        }
+
+        function closeUpdateModal() {
+            if (updateBusy) return;
+            document.getElementById('update-modal').classList.add('hidden');
+        }
+
+        async function openUpdateReleaseUrl() {
+            const url = latestUpdateInfo?.release_url || 'https://github.com/ZonalRipper/PS2-ISO-Manager/releases';
+            try {
+                await fetch('/api/open-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+            } catch (e) {}
+        }
+
+        async function startAutomaticUpdate() {
+            if (updateBusy || !latestUpdateInfo) return;
+            const errBox = document.getElementById('update-error-box');
+            const progWrap = document.getElementById('update-progress-wrap');
+            const progBar = document.getElementById('update-progress-bar');
+            const progLbl = document.getElementById('update-progress-label');
+            const progPct = document.getElementById('update-progress-pct');
+            const installBtn = document.getElementById('update-install-btn');
+            const laterBtn = document.getElementById('update-later-btn');
+            const closeX = document.getElementById('update-close-x');
+
+            errBox.classList.add('hidden');
+            progWrap.classList.remove('hidden');
+            progBar.style.width = '3%';
+            progLbl.textContent = 'Starting download from GitHub...';
+            progPct.textContent = '0%';
+            updateBusy = true;
+            installBtn.disabled = true;
+            installBtn.textContent = '⏳ Updating...';
+            laterBtn.disabled = true;
+            closeX.disabled = true;
+
+            try {
+                const res = await fetch('/api/update/download', { method: 'POST' });
+                const startData = await res.json();
+                if (startData.status !== 'started') {
+                    throw new Error(startData.error || 'Could not start update download.');
+                }
+
+                const poll = setInterval(async () => {
+                    try {
+                        const sr = await fetch('/api/update/status');
+                        const st = await sr.json();
+                        const pct = Math.min(100, Math.max(0, Number(st.percent) || 0));
+                        progBar.style.width = `${pct}%`;
+                        progPct.textContent = `${pct.toFixed(0)}%`;
+                        progLbl.textContent = st.total_fmt && st.total_fmt !== 'Unknown' && st.state === 'downloading'
+                            ? `${st.message} (${st.downloaded_fmt} / ${st.total_fmt})`
+                            : (st.message || 'Downloading...');
+
+                        if (st.state === 'ready') {
+                            clearInterval(poll);
+                            progLbl.textContent = 'Verified! Replacing executable & restarting...';
+                            progPct.textContent = '100%';
+                            progBar.style.width = '100%';
+                            const ar = await fetch('/api/update/apply', { method: 'POST' });
+                            const ad = await ar.json();
+                            if (ad.status !== 'restarting') {
+                                throw new Error(ad.error || 'Failed to apply update.');
+                            }
+                            installBtn.textContent = '🔄 Restarting...';
+                        } else if (st.state === 'error') {
+                            clearInterval(poll);
+                            updateBusy = false;
+                            installBtn.disabled = false;
+                            installBtn.textContent = '⬇️ Retry Update';
+                            laterBtn.disabled = false;
+                            closeX.disabled = false;
+                            errBox.textContent = st.error || 'Update failed.';
+                            errBox.classList.remove('hidden');
+                        }
+                    } catch (e) {
+                        clearInterval(poll);
+                        updateBusy = false;
+                        installBtn.disabled = false;
+                        installBtn.textContent = '⬇️ Retry Update';
+                        laterBtn.disabled = false;
+                        closeX.disabled = false;
+                        errBox.textContent = e.message || 'Update error.';
+                        errBox.classList.remove('hidden');
+                    }
+                }, 250);
+            } catch (err) {
+                updateBusy = false;
+                installBtn.disabled = false;
+                installBtn.textContent = '⬇️ Download & Install';
+                laterBtn.disabled = false;
+                closeX.disabled = false;
+                errBox.textContent = err.message || 'Update failed.';
+                errBox.classList.remove('hidden');
+            }
+        }
+
         function initApp() {
             try {
                 if (localStorage.getItem('ps2_glass_tone') === 'light') toggleGlassTone();
@@ -3077,6 +3606,7 @@
             renderRecentFolderChips();
             updateWizardUI();
             refreshSidebarAdmin();
+            setTimeout(() => checkForUpdates(true, false), 1500);
         }
         window.addEventListener('DOMContentLoaded', initApp);
     </script>

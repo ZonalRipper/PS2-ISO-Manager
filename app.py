@@ -15,6 +15,7 @@ import base64
 import ctypes
 import tempfile
 import urllib.parse
+import webbrowser
 import tkinter as tk
 from tkinter import filedialog
 from typing import List, Dict, Any
@@ -54,6 +55,16 @@ from ps2_utility.pfs import (
     hdl_rename_game,
     pfs_remove_hdl_partition,
     upload_opl_assets_to_pfs,
+    list_physical_disks_for_format,
+    format_drive_to_pfs,
+)
+from ps2_utility.updater import (
+    APP_VERSION,
+    GITHUB_RELEASES_WEB,
+    is_allowed_github_url,
+    check_for_updates,
+    download_and_verify_update,
+    launch_self_replace_updater,
 )
 
 # Redirect stdout/stderr when running as a windowed PyInstaller executable (console=False)
@@ -486,6 +497,13 @@ class PfsDeleteGameRequest(BaseModel):
     device: str
     partition_name: str
 
+class PfsFormatDriveRequest(BaseModel):
+    device: str
+    confirm_phrase: str
+    create_opl: bool = True
+    opl_size_mb: int = 256
+    clear_windows_layout: bool = True
+
 class UsbInspectRequest(BaseModel):
     root_path: str
 
@@ -560,6 +578,9 @@ class SaveGameCfgRequest(BaseModel):
     raw_id: str
     cfg_data: Dict[str, Any]
 
+class OpenUrlRequest(BaseModel):
+    url: str
+
 # --- Native Dialogs via Tkinter (Compatible with PyInstaller & PyWebView) ---
 def pick_folder_native(title: str) -> str:
     print(f"\n[SYSTEM] Triggering folder picker: {title}")
@@ -599,7 +620,7 @@ def pick_file_native(title: str, action: str) -> str:
 # --- Routes ---
 @app.get("/", response_class=HTMLResponse)
 def serve_ui(request: Request):
-    return templates.TemplateResponse(request=request, name="index.html", context={"request": request})
+    return templates.TemplateResponse(request=request, name="index.html", context={"request": request, "app_version": APP_VERSION})
 
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
@@ -607,6 +628,144 @@ def favicon():
     if os.path.exists(icon_path):
         return FileResponse(icon_path, media_type="image/x-icon")
     return Response(content=b"", media_type="image/x-icon")
+
+
+# --- GitHub Auto-Updater State & Endpoints ---
+_update_cache = {"ts": 0.0, "data": None}
+_update_state = {
+    "state": "idle",  # idle | downloading | verifying | ready | installing | error
+    "downloaded_bytes": 0,
+    "total_bytes": 0,
+    "percent": 0.0,
+    "downloaded_fmt": "0 B",
+    "total_fmt": "0 B",
+    "message": "",
+    "error": "",
+    "staged_path": "",
+    "target_version": "",
+}
+_update_lock = threading.Lock()
+
+
+@app.get("/api/update/check")
+def api_update_check(force: int = 0):
+    now = time.time()
+    if not force and _update_cache["data"] and (now - _update_cache["ts"]) < 60.0:
+        return _update_cache["data"]
+    result = check_for_updates(APP_VERSION)
+    if result.get("status") == "ok":
+        _update_cache["ts"] = now
+        _update_cache["data"] = result
+    return result
+
+
+@app.get("/api/update/status")
+def api_update_status():
+    with _update_lock:
+        return {k: v for k, v in _update_state.items() if k != "staged_path"}
+
+
+@app.post("/api/update/download")
+def api_update_download():
+    with _update_lock:
+        if _update_state["state"] in ("downloading", "verifying", "installing"):
+            return {"status": "busy", "error": "An update download is already in progress."}
+
+    info = _update_cache["data"] or check_for_updates(APP_VERSION)
+    if info.get("status") != "ok":
+        return {"status": "error", "error": info.get("error") or "Could not check GitHub for updates."}
+    if not info.get("update_available"):
+        return {"status": "up_to_date", "error": f"Already running the latest version (v{APP_VERSION})."}
+    if not info.get("download_url"):
+        return {"status": "error", "error": "Latest GitHub release does not contain a PS2-ISO-Manager.exe asset."}
+
+    with _update_lock:
+        _update_state.update({
+            "state": "downloading",
+            "downloaded_bytes": 0,
+            "total_bytes": int(info.get("asset_size") or 0),
+            "percent": 0.0,
+            "downloaded_fmt": "0 B",
+            "total_fmt": info.get("asset_size_fmt") or "Unknown",
+            "message": f"Starting download for v{info.get('latest_version')}...",
+            "error": "",
+            "staged_path": "",
+            "target_version": info.get("latest_version") or "",
+        })
+
+    def progress_cb(downloaded: int, total: int, msg: str):
+        pct = round((downloaded / total) * 100.0, 1) if total > 0 else 0.0
+        with _update_lock:
+            _update_state["state"] = "verifying" if "verifying" in msg.lower() else "downloading"
+            _update_state["downloaded_bytes"] = downloaded
+            _update_state["total_bytes"] = total
+            _update_state["percent"] = min(100.0, pct)
+            _update_state["downloaded_fmt"] = format_size(downloaded)
+            _update_state["total_fmt"] = format_size(total) if total > 0 else "Unknown"
+            _update_state["message"] = msg
+
+    def worker():
+        ok, staged_path, err = download_and_verify_update(
+            download_url=info["download_url"],
+            expected_size=int(info.get("asset_size") or 0),
+            sha256_url=info.get("sha256_url") or "",
+            asset_name=info.get("asset_name") or "PS2-ISO-Manager.exe",
+            progress_cb=progress_cb,
+        )
+        with _update_lock:
+            if ok:
+                _update_state["state"] = "ready"
+                _update_state["percent"] = 100.0
+                _update_state["staged_path"] = staged_path
+                _update_state["message"] = f"v{info.get('latest_version')} verified and ready to install!"
+                _update_state["error"] = ""
+            else:
+                _update_state["state"] = "error"
+                _update_state["error"] = err or "Update download failed."
+                _update_state["message"] = "Update failed."
+
+    threading.Thread(target=worker, daemon=True).start()
+    return {"status": "started"}
+
+
+@app.post("/api/update/apply")
+def api_update_apply():
+    if is_running or any(s.is_running for s in active_sessions.values()):
+        return {"status": "error", "error": "Please wait for active file or drive operations to finish before installing the update."}
+
+    with _update_lock:
+        if _update_state["state"] != "ready" or not _update_state.get("staged_path"):
+            return {"status": "error", "error": "No verified update is ready to install."}
+        staged = _update_state["staged_path"]
+        _update_state["state"] = "installing"
+        _update_state["message"] = "Replacing executable and restarting..."
+
+    ok, err = launch_self_replace_updater(staged)
+    if not ok:
+        with _update_lock:
+            _update_state["state"] = "error"
+            _update_state["error"] = err
+        return {"status": "error", "error": err}
+
+    # Exit shortly after returning the JSON response so the detached updater can swap the EXE cleanly
+    def delayed_exit():
+        time.sleep(0.45)
+        os._exit(0)
+
+    threading.Thread(target=delayed_exit, daemon=True).start()
+    return {"status": "restarting"}
+
+
+@app.post("/api/open-url")
+def api_open_url(req: OpenUrlRequest):
+    url = (req.url or "").strip() or GITHUB_RELEASES_WEB
+    if not is_allowed_github_url(url):
+        return {"status": "error", "error": "Only official GitHub URLs can be opened from here."}
+    try:
+        webbrowser.open(url)
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 @app.get("/api/select-source", response_model=FolderResponse)
 def select_source_folder():
@@ -893,6 +1052,57 @@ def api_pfs_delete_game(req: PfsDeleteGameRequest):
         return {"status": "ok" if ok else "error", "error": "" if ok else out}
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
+
+@app.get("/api/pfs/physical-disks")
+def api_pfs_physical_disks():
+    return list_physical_disks_for_format(resource_path("hdl_dump.exe"))
+
+
+@app.post("/api/pfs/format-drive")
+def api_pfs_format_drive(req: PfsFormatDriveRequest):
+    global is_running
+    if not is_admin():
+        return {"status": "error", "error": "Administrator privileges are required to format a physical drive."}
+    if is_running or any(s.is_running for s in active_sessions.values()):
+        return {"status": "already_running", "error": "Another operation is currently running. Please wait for it to finish."}
+
+    dev = (req.device or "").strip().lower()
+    expected = f"FORMAT {dev}".upper()
+    if (req.confirm_phrase or "").strip().upper() != expected:
+        return {"status": "error", "error": f"Confirmation mismatch. Please type '{expected}' exactly."}
+
+    session_id = str(uuid.uuid4())
+    session = LogSession()
+    active_sessions[session_id] = session
+    is_running = True
+    session.logs.append(f"[SYSTEM] Starting PS2 APA / PFS Format for {dev}...")
+
+    def worker():
+        global is_running
+        try:
+            ok, err = format_drive_to_pfs(
+                pfsshell_exe=resource_path("pfsshell.exe"),
+                hdl_dump_exe=resource_path("hdl_dump.exe"),
+                hdd_device=dev,
+                confirm_phrase=req.confirm_phrase,
+                create_opl=req.create_opl,
+                opl_size_mb=req.opl_size_mb,
+                clear_windows_layout=req.clear_windows_layout,
+                log_cb=lambda msg: session.logs.append(msg),
+            )
+            if ok:
+                session.logs.append(f"[DONE] {dev} is now formatted for PlayStation 2 APA / PFS and ready for OPL!")
+            else:
+                session.logs.append(f"[ERROR] {err or 'Format failed.'}")
+        except Exception as e:
+            session.logs.append(f"[ERROR] Unexpected error during format: {e}")
+        finally:
+            session.is_running = False
+            is_running = False
+
+    threading.Thread(target=worker, daemon=True).start()
+    return {"status": "started", "session_id": session_id}
 
 
 # --- USB / exFAT / FAT32 / SMB File Browser Endpoints ---
@@ -2852,7 +3062,7 @@ if __name__ == "__main__":
     host = "127.0.0.1"
     port = find_available_port(8000)
     url = f"http://{host}:{port}"
-    print(f"Starting PS2 ISO Manager v2.0 Web Server at {url}...")
+    print(f"Starting PS2 ISO Manager v{APP_VERSION} Web Server at {url}...")
     
     # 1. Start FastAPI in a background daemon thread
     threading.Thread(
@@ -2866,7 +3076,7 @@ if __name__ == "__main__":
     # 3. Create native window with pywebview on the MAIN thread
     import webview
     window = webview.create_window(
-        title="PS2 ISO Manager v2.0",
+        title=f"PS2 ISO Manager v{APP_VERSION}",
         url=url,
         width=1220,
         height=860,

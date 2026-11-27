@@ -1,11 +1,15 @@
 import ctypes
+import json
 import os
 import re
 import subprocess
 import tempfile
-from typing import Dict, List, Optional, Tuple
+import time
+from typing import Callable, Dict, List, Optional, Tuple
 
 from ps2_utility.core import format_size
+
+MAX_APA_SAFE_BYTES = 2_200_000_000_000  # ~2 TB (PS2 APA 48-bit LBA practical limit)
 
 HDD_DEVICE_RE = re.compile(r'^hdd(\d+):$', re.IGNORECASE)
 QUERY_LINE_RE = re.compile(r'^\s*(hdd\d+:)\s+(\d+)\s*MB(.*)$', re.IGNORECASE)
@@ -706,3 +710,277 @@ def upload_opl_assets_to_pfs(
     commands.append("exit")
 
     return run_pfsshell_script(pfsshell_exe, commands, cwd=stage_root, timeout=180)
+
+
+def list_physical_disks_for_format(hdl_dump_exe: str = "") -> Dict:
+    """Enumerate Windows physical disks with rich hardware metadata and strict OS-disk protection.
+
+    Uses PowerShell `Get-Disk` + `Get-Partition` and cross-checks against `hdl_dump query`.
+    Any disk that is System, Boot, holds %SystemDrive%, is Read-Only, or exceeds 2 TB is marked protected.
+    """
+    admin = is_admin()
+    if os.name != "nt":
+        return {"is_admin": admin, "disks": [], "error": "Physical disk formatting is only supported on Windows."}
+
+    ps_script = (
+        "$ErrorActionPreference = 'SilentlyContinue'; "
+        "$disks = @(Get-Disk | Sort-Object Number | ForEach-Object { "
+        "  $num = [int]$_.Number; "
+        "  $parts = @(Get-Partition -DiskNumber $num | Where-Object { $_.DriveLetter } | ForEach-Object { ($_.DriveLetter.ToString().ToUpper() + ':') }); "
+        "  [PSCustomObject]@{ "
+        "    number = $num; "
+        "    friendly_name = [string]$_.FriendlyName; "
+        "    bus_type = [string]$_.BusType; "
+        "    size_bytes = [int64]$_.Size; "
+        "    partition_style = [string]$_.PartitionStyle; "
+        "    is_system = [bool]$_.IsSystem; "
+        "    is_boot = [bool]$_.IsBoot; "
+        "    is_readonly = [bool]$_.IsReadOnly; "
+        "    is_offline = [bool]$_.IsOffline; "
+        "    letters = $parts "
+        "  } "
+        "}); "
+        "if ($disks.Count -eq 0) { "
+        "  $disks = @(Get-CimInstance Win32_DiskDrive | Sort-Object Index | ForEach-Object { "
+        "    $d = $_; "
+        "    $parts = @(Get-CimAssociatedInstance -InputObject $d -ResultClassName Win32_DiskPartition); "
+        "    $isBoot = [bool]($parts | Where-Object { $_.BootPartition -or $_.Bootable } | Select-Object -First 1); "
+        "    $lets = @(); "
+        "    foreach ($p in $parts) { "
+        "      foreach ($ld in @(Get-CimAssociatedInstance -InputObject $p -ResultClassName Win32_LogicalDisk)) { "
+        "        if ($ld.DeviceID) { $lets += $ld.DeviceID.ToString().ToUpper() } "
+        "      } "
+        "    } "
+        "    [PSCustomObject]@{ "
+        "      number = [int]$d.Index; "
+        "      friendly_name = [string]$d.Model; "
+        "      bus_type = [string]$d.InterfaceType; "
+        "      size_bytes = [int64]$d.Size; "
+        "      partition_style = $(if ($parts.Count -eq 0) { 'RAW' } else { 'MBR/GPT' }); "
+        "      is_system = $isBoot; "
+        "      is_boot = $isBoot; "
+        "      is_readonly = $false; "
+        "      is_offline = $false; "
+        "      letters = $lets "
+        "    } "
+        "  }); "
+        "} "
+        "ConvertTo-Json -InputObject $disks -Depth 4 -Compress"
+    )
+
+    try:
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            creationflags=_creationflags(),
+        )
+        raw_json = (proc.stdout or "").strip()
+        if not raw_json or raw_json == "null":
+            if not admin:
+                return {"is_admin": False, "disks": [], "error": "Administrator privileges are required to detect and format physical hard drives on Windows."}
+            err = (proc.stderr or "").strip() or "No physical disks returned by Windows."
+            return {"is_admin": admin, "disks": [], "error": err}
+        parsed = json.loads(raw_json)
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        elif not isinstance(parsed, list):
+            parsed = []
+    except Exception as e:
+        return {"is_admin": admin, "disks": [], "error": f"Failed to enumerate physical disks: {e}"}
+
+    if not parsed and not admin:
+        return {"is_admin": False, "disks": [], "error": "Administrator privileges are required to detect and format physical hard drives on Windows."}
+
+    # Cross-check with hdl_dump query to tag already-formatted PS2 APA drives
+    ps2_devices = set()
+    if hdl_dump_exe and os.path.exists(hdl_dump_exe):
+        q = query_ps2_hdd_drives(hdl_dump_exe, "")
+        for d in q.get("drives", []):
+            ps2_devices.add(d["device"].lower())
+
+    sys_drive = (os.environ.get("SystemDrive") or "C:").strip().upper()
+    if not sys_drive.endswith(":"):
+        sys_drive += ":"
+
+    disks: List[Dict] = []
+    for item in parsed:
+        try:
+            num = int(item.get("number"))
+        except (TypeError, ValueError):
+            continue
+        dev = f"hdd{num}:"
+        phys = hdd_to_physical_drive(dev)
+        size_bytes = int(item.get("size_bytes") or 0)
+        letters = [str(l).upper() for l in (item.get("letters") or []) if l]
+        is_system = bool(item.get("is_system"))
+        is_boot = bool(item.get("is_boot"))
+        is_readonly = bool(item.get("is_readonly"))
+        is_ps2 = dev in ps2_devices
+        part_style = "PS2 APA" if is_ps2 else (str(item.get("partition_style") or "RAW").upper())
+        bus_type = str(item.get("bus_type") or "Unknown")
+        friendly = str(item.get("friendly_name") or f"Physical Disk {num}").strip()
+
+        protect_reasons = []
+        if is_system or is_boot or (sys_drive in letters):
+            protect_reasons.append(f"Windows OS / System Drive ({sys_drive})" if sys_drive in letters else "Windows System / Boot Disk")
+        if is_readonly:
+            protect_reasons.append("Read-Only Disk")
+        if size_bytes <= 0:
+            protect_reasons.append("Empty / No Media")
+        elif size_bytes > MAX_APA_SAFE_BYTES:
+            protect_reasons.append("Exceeds PS2 APA 2 TB limit (use exFAT instead)")
+
+        is_protected = len(protect_reasons) > 0
+        disks.append({
+            "number": num,
+            "device": dev,
+            "physical_drive": phys,
+            "friendly_name": friendly,
+            "bus_type": bus_type,
+            "size_bytes": size_bytes,
+            "size_fmt": format_size(size_bytes),
+            "partition_style": part_style,
+            "letters": letters,
+            "is_ps2": is_ps2,
+            "is_system": is_system,
+            "is_boot": is_boot,
+            "is_readonly": is_readonly,
+            "is_protected": is_protected,
+            "protect_reason": "; ".join(protect_reasons),
+            "confirm_phrase": f"FORMAT {dev}",
+        })
+
+    # Show safe non-OS disks first (USB/SATA external drives), protected OS disks at the bottom
+    disks.sort(key=lambda d: (1 if d["is_protected"] else 0, 0 if d["bus_type"].upper() == "USB" else 1, d["number"]))
+    return {"is_admin": admin, "disks": disks, "error": ""}
+
+
+def format_drive_to_pfs(
+    pfsshell_exe: str,
+    hdl_dump_exe: str,
+    hdd_device: str,
+    confirm_phrase: str,
+    create_opl: bool = True,
+    opl_size_mb: int = 256,
+    clear_windows_layout: bool = True,
+    log_cb: Optional[Callable[[str], None]] = None,
+) -> Tuple[bool, str]:
+    """Safely format a non-OS physical disk to PS2 APA and optionally create/format `+OPL` PFS.
+
+    Enforces strict backend safety checks:
+      1. Requires Windows Administrator privileges.
+      2. Requires exact confirmation phrase `FORMAT hddN:`.
+      3. Re-enumerates live Windows disks and blocks any System/Boot/OS/Read-Only/>2TB disk.
+    """
+    def emit(msg: str):
+        if log_cb:
+            log_cb(msg)
+
+    if not is_admin():
+        return False, "Administrator privileges are required to format a physical drive to PS2 APA/PFS."
+
+    dev = (hdd_device or "").strip().lower()
+    m = HDD_DEVICE_RE.match(dev)
+    if not m:
+        return False, f"Invalid target device identifier: {hdd_device!r}"
+    disk_num = int(m.group(1))
+    phys = hdd_to_physical_drive(dev)
+
+    expected_phrase = f"FORMAT {dev}".upper()
+    if (confirm_phrase or "").strip().upper() != expected_phrase:
+        return False, f"Confirmation mismatch. You must type '{expected_phrase}' exactly."
+
+    if create_opl and opl_size_mb not in (128, 256, 512, 1024, 2048):
+        return False, "Invalid +OPL partition size (must be 128, 256, 512, 1024, or 2048 MB)."
+
+    if not pfsshell_exe or not os.path.exists(pfsshell_exe):
+        return False, "pfsshell.exe not found in application directory."
+
+    emit(f"[SAFETY] Re-verifying live Windows disk layout for {dev} ({phys})...")
+    scan = list_physical_disks_for_format(hdl_dump_exe)
+    if scan.get("error"):
+        return False, f"Safety check failed — could not verify disks: {scan['error']}"
+
+    target_disk = next((d for d in scan.get("disks", []) if d["number"] == disk_num), None)
+    if not target_disk:
+        return False, f"Disk {dev} ({phys}) is no longer connected."
+    if target_disk["is_protected"]:
+        return False, f"BLOCKED: Refused to format protected disk {dev} ({target_disk['friendly_name']}): {target_disk['protect_reason']}"
+
+    emit(f"[TARGET] Confirmed non-OS disk: {target_disk['friendly_name']} ({target_disk['size_fmt']}, {target_disk['bus_type']}, {target_disk['partition_style']})")
+
+    # Step 1: Clear Windows MBR/GPT partition layout so Windows releases volume locks
+    if clear_windows_layout:
+        emit(f"[DISKPART] Clearing Windows partition table on Disk {disk_num} to release volume locks...")
+        dp_script = f"select disk {disk_num}\nclean\nexit\n"
+        try:
+            dp = subprocess.run(
+                ["diskpart.exe"],
+                input=dp_script,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                creationflags=_creationflags(),
+            )
+            dp_out = ((dp.stdout or "") + "\n" + (dp.stderr or "")).strip()
+            for line in dp_out.splitlines():
+                s = line.strip()
+                if s and any(k in s.lower() for k in ("succeeded", "error", "selected", "clean", "virtual disk")):
+                    emit(f"[DISKPART] {s}")
+            if dp.returncode != 0:
+                return False, f"diskpart clean failed (exit {dp.returncode}): {dp_out}"
+        except Exception as e:
+            return False, f"Failed to run diskpart clean: {e}"
+        time.sleep(1.5)
+
+    # Step 2: Initialize PS2 APA partition table via pfsshell
+    emit(f"[PFSSHELL] Initializing PlayStation 2 APA partition table on {phys}...")
+    ok_init, out_init = run_pfsshell_script(
+        pfsshell_exe,
+        [f"device {phys}", "initialize yes", "exit"],
+        timeout=120,
+    )
+    for line in (out_init or "").splitlines():
+        s = line.strip()
+        if s and not s.startswith(">"):
+            emit(f"[PFSSHELL] {s}")
+    if not ok_init:
+        return False, f"APA initialization failed: {out_init or 'Unknown pfsshell error'}"
+    emit("[SUCCESS] PS2 APA partition table (__mbr, __net, __system, __sysconf, __common) created!")
+
+    # Step 3: Optionally create & format +OPL PFS partition with standard OPL folders
+    if create_opl:
+        emit(f"[PFSSHELL] Creating & formatting +OPL PFS partition ({opl_size_mb} MB)...")
+        opl_cmds = [
+            f"device {phys}",
+            f"mkpart +OPL {opl_size_mb}M",
+            "mkfs +OPL",
+            "mount +OPL",
+            "mkdir ART",
+            "mkdir CFG",
+            "mkdir VMC",
+            "mkdir CHT",
+            "mkdir THM",
+            "mkdir APPS",
+            "umount",
+            "exit",
+        ]
+        ok_opl, out_opl = run_pfsshell_script(pfsshell_exe, opl_cmds, timeout=120)
+        for line in (out_opl or "").splitlines():
+            s = line.strip()
+            if s and not s.startswith(">"):
+                emit(f"[PFSSHELL] {s}")
+        if not ok_opl:
+            return False, f"APA format succeeded, but +OPL partition setup failed: {out_opl}"
+        emit(f"[SUCCESS] +OPL ({opl_size_mb} MB) formatted with ART/, CFG/, VMC/, CHT/, THM/, and APPS/!")
+
+    # Step 4: Verify drive is now recognized as a PS2 APA HDD
+    emit(f"[VERIFY] Verifying {dev} with hdl_dump & pfsshell...")
+    time.sleep(0.5)
+    has_opl, part_names, _, _ = list_pfs_partitions(pfsshell_exe, dev)
+    emit(f"[SUCCESS] Verified {dev}: {len(part_names)} APA partition(s) detected ({', '.join(part_names[:8])}).")
+    if create_opl and not has_opl:
+        emit("[WARNING] +OPL partition was not immediately listed — try rescanning in PFS Drive Browser.")
+    return True, ""

@@ -1,6 +1,6 @@
-# 🎮 PS2 ISO Manager v2.0 — Open PS2 Loader (OPL) Suite
+# 🎮 PS2 ISO Manager v2.1 — Open PS2 Loader (OPL) Suite
 
-![Version](https://img.shields.io/badge/Version-2.0-0ea5e9?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.1-0ea5e9?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0051cc?style=for-the-badge&logo=windows)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
@@ -9,18 +9,19 @@
 
 A modern desktop utility built with **FastAPI**, **PyWebView**, **Tailwind CSS**, and **Three.js** to convert, rename, compress, verify, browse, and organize PlayStation 2 game libraries for **Open PS2 Loader (OPL)** across **USB, exFAT/FAT32 drives, SMB network shares, and Internal PS2 HDDs (APA / PFS)**.
 
-Featuring the **v2.0 Liquid Glass GUI** with Dark Glass & Light Frost themes, a drive-format categorized sidebar, interactive USB/SMB & APA/PFS drive browsers, a 7-step Auto Pilot Wizard, and an interactive **3D WebGL Amaray DVD Case & OPL Config Studio**.
+Featuring the **Liquid Glass GUI** with Dark Glass & Light Frost themes, a drive-format categorized sidebar, interactive USB/SMB & APA/PFS drive browsers, a 7-step Auto Pilot Wizard, safe APA/PFS drive formatting, built-in **GitHub Auto-Updater**, and an interactive **3D WebGL Amaray DVD Case & OPL Config Studio**.
 
 ---
 
 ## ✨ Key Highlights
 
-- **🫧 v2.0 Liquid Glass GUI Layout**: Frosted translucent surfaces, Dark Glass / Light Frost theme switcher, smooth fluid transitions, and a categorized left sidebar organized by workflow & drive format (**Guided Setup**, **USB / exFAT / SMB**, **Internal PS2 HDD (APA / PFS)**, and **Local Disc Tools**).
+- **🫧 Liquid Glass GUI Layout**: Frosted translucent surfaces, Dark Glass / Light Frost theme switcher, smooth fluid transitions, and a categorized left sidebar organized by workflow & drive format (**Guided Setup**, **USB / exFAT / SMB**, **Internal PS2 HDD (APA / PFS)**, and **Local Disc Tools**).
 - **⚡ 7-Step Guided Auto Pilot Wizard**: Turn a folder of raw downloads or disc rips (`.iso`, `.zso`, `.bin/.cue`, `.chd`) into a clean, named, compressed, artwork-populated OPL USB/SMB drive or APA/PFS internal PS2 HDD.
 - **💾 USB / exFAT / FAT32 / SMB Drive Browser**: Auto-detects mounted USB & mapped network drives, supports direct UNC SMB paths (`\\SERVER\PS2SMB`), lists `DVD/`, `CD/`, and FAT32 `ul.cfg` games, manages OPL folders, previews artwork, and edits per-game `CFG` files directly.
 - **💽 Internal PS2 HDD (APA / PFS) Support & PFS Drive Browser**: Built-in `hdl_dump` and `pfsshell` integration with 1-click UAC elevation to install/rename/delete HDL games, browse `+OPL` files, create `+OPL` partitions, scrape art, generate CFGs, and clean orphaned artwork directly on APA-formatted PS2 hard drives.
 - **🩹 Auto-Recreates Missing `.CUE` Files & Full `.CHD` / `.ZSO` Support**: Automatically regenerates missing `.cue` sheets from `.bin` sector headers, extracts `.chd` dumps, compresses `.iso` to `.zso` (saving 25–40% space), and automatically splits `>4 GB` ISOs into `1 GB` USBUtil (`ul.cfg`) chunks on `FAT32` drives.
 - **🎨 3D WebGL Cover Art Gallery & OPL Config Studio**: Inspect your USB/SMB or Internal HDD library in a rotatable 3D PlayStation 2 DVD case with spinning disc, drag-and-drop custom art auto-resizing, and edit **Compatibility Modes 1–6** & **Virtual Memory Card (`$VMC_0`)** presets with smooth hover guides.
+- **🔄 Built-in GitHub Auto-Updater**: Quietly checks GitHub Releases on startup (or manually from **Info → Check for Updates**), displays release notes, downloads and verifies the new `PS2-ISO-Manager.exe` (PE header, byte size, and optional `.sha256` checksum), safely swaps the executable with rollback protection, and relaunches automatically.
 
 ---
 
@@ -42,6 +43,7 @@ Walks through your batch library setup step by step with clickable progress trac
 
 ### 3. Internal PS2 HDD (APA / PFS) Tools
 - **💽 PFS Drive Browser:** View installed HDL games (rename, delete, edit CFG), browse `+OPL` and other PFS partitions (upload/download/mkdir/preview/delete), inspect APA partitions, and create a 256 MB `+OPL` partition in one click.
+- **🔥 Format Drive to PFS:** Safely initialize a non-OS physical drive (up to 2 TB) to PlayStation 2 APA with automatic OS/Boot disk protection, typed `FORMAT hddN:` confirmation, optional `diskpart clean`, and automated `+OPL` partition (`128 MB`–`2 GB`) + `ART/CFG/VMC/CHT/THM/APPS` folder setup.
 - **🖼️ PFS Art Scraper / 📝 PFS CFG Generator / 🧹 PFS Drive Cleaner / 🎨 PFS 3D Gallery**
 
 ### 4. Local Disc Tools (PC Files)
@@ -72,9 +74,10 @@ PS2-ISO-Manager/
 │   ├── __init__.py         # Package exports
 │   ├── core.py             # Game ID sector scanner, missing .CUE generator, FAT32 ul.cfg splitter,
 │   │                       # disc verifier (CRC32/MD5), drive filesystem detector, and CFG parser/writer
-│   └── pfs.py              # APA/PFS drive detection, HDL game installer/TOC manager, and pfsshell bridge
+│   ├── pfs.py              # APA/PFS drive detection, safe formatter, HDL TOC manager, and pfsshell bridge
+│   └── updater.py          # GitHub Releases version checker, verified EXE downloader, and self-updater
 ├── templates/
-│   └── index.html          # v2.0 Liquid Glass Tailwind CSS + Three.js WebGL single-page application UI
+│   └── index.html          # Liquid Glass Tailwind CSS + Three.js WebGL single-page application UI
 ├── app.py                  # FastAPI backend server, USB/SMB & PFS APIs, async workers, PyWebView launcher
 ├── app.spec                # PyInstaller build specification for standalone Windows executable
 ├── PS2.data.json           # Bundled offline 13,000+ PS2 title & metadata database
