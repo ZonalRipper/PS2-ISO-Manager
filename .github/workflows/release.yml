@@ -78,8 +78,9 @@ jobs:
               # Default fallback: extract missing CLI binaries from the repo's pinned OfficialRelease / v2.1.1 bundle if available
               Write-Host "Fetching missing CLI tools: $($missing -join ', ')"
               $tmpExe = Join-Path $env:RUNNER_TEMP "prev_bundle.exe"
-              Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/download/v2.1.1/PS2-ISO-Manager.exe" -OutFile $tmpExe
-              python -c "from PyInstaller.archive.readers import CArchiveReader; import os; r=CArchiveReader(r'$tmpExe'); [open(k,'wb').write(r.extract(k)) for k in ['bchunk.exe','ziso.exe','chdman.exe','hdl_dump.exe','pfsshell.exe'] if k in r.toc and not os.path.exists(k)]"
+              Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/latest/download/PS2-ISO-Manager.exe" -OutFile $tmpExe
+              $env:PS2_PREV_EXE = $tmpExe
+              python -c "from PyInstaller.archive.readers import CArchiveReader; import os; r=CArchiveReader(os.environ['PS2_PREV_EXE']); [open(k,'wb').write(r.extract(k)) for k in ['bchunk.exe','ziso.exe','chdman.exe','hdl_dump.exe','pfsshell.exe'] if k in r.toc and not os.path.exists(k)]"
               Remove-Item $tmpExe -Force -ErrorAction SilentlyContinue
             } else {
               $zipPath = Join-Path $env:RUNNER_TEMP "cli_tools.zip"
@@ -137,7 +138,7 @@ jobs:
           path: release-out
 
       - name: Submit signing request to SignPath Foundation
-        if: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
         uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
